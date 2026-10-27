@@ -1,0 +1,26 @@
+services:
+  # 開発サーバー: http://localhost:5173（DEV_PORT で変更可）
+  dev:
+    build:
+      context: .
+      target: dev
+    ports:
+      - "${DEV_PORT:-5173}:5173"
+    volumes:
+      - .:/app
+      # node_modules はコンテナ側（Linux 用ネイティブバイナリ）を使う
+      - node_modules:/app/node_modules
+    environment:
+      - VITE_USE_POLLING=${VITE_USE_POLLING:-false}
+
+  # 本番ビルドを nginx で配信: http://localhost:8080（PROD_PORT で変更可）
+  prod:
+    build:
+      context: .
+      target: prod
+    ports:
+      - "${PROD_PORT:-8080}:80"
+    profiles: ["prod"]
+
+volumes:
+  node_modules:

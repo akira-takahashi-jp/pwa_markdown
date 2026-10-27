@@ -1,0 +1,29 @@
+/* 印刷（PDF 出力）用 */
+@media print {
+  html, body, #root, .app, .workspace, .main, .pane-preview, .preview-scroller {
+    height: auto !important;
+    overflow: visible !important;
+    display: block !important;
+    background: #fff !important;
+  }
+  .toolbar, .tabbar, .sidebar, .pane-editor, .splitter, .banner, .toasts, .fallback-notice, .drop-hint { display: none !important; }
+  .pane-preview { display: block !important; }
+
+  .preview-scroller > .markdown-body { max-width: none; padding: 0; }
+  .markdown-body pre, .markdown-body .code-block, .markdown-body table, .markdown-body .mermaid-ph,
+  .markdown-body img, .markdown-body blockquote { break-inside: avoid; }
+  .markdown-body h1, .markdown-body h2, .markdown-body h3 { break-after: avoid; }
+  .markdown-body pre { white-space: pre-wrap; }
+
+  /* Marp: 1 スライド 1 ページ */
+  .printing-marp .slides { padding: 0 !important; }
+  .printing-marp .slides div.marpit > svg[data-marpit-svg] {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: none !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    break-after: page;
+  }
+  .printing-marp .slides div.marpit > svg[data-marpit-svg]:last-child { break-after: auto; }
+}
