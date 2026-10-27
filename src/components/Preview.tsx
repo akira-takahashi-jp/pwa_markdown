@@ -1,7 +1,8 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useReducer, useRef, useState } from 'react'
 import { patchBlocks } from '../lib/blocks'
 import { renderMarkdown, type Heading } from '../lib/markdown'
 import { hydrateMermaid, type Hydration } from '../lib/mermaid'
+import { DiagramTools, MermaidViewer, useInlineDiagramZoom, zoomableDiagram } from './MermaidZoom'
 import { collectAnchors, lineToTop, topToLine, type Anchor, type PreviewHandle } from '../lib/scrollSync'
 
 interface Props {
@@ -23,6 +24,15 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(props, 
   const themeRef = useRef(props.themeKey)
   const propsRef = useRef(props)
   propsRef.current = props
+  /** マウスが乗っている mermaid の図（拡大縮小ボタンを出す） */
+  const [hovered, setHovered] = useState<HTMLElement | null>(null)
+  const [viewerSource, setViewerSource] = useState<HTMLElement | null>(null)
+  const [, rerender] = useReducer((n: number) => n + 1, 0)
+  const onZoomChange = useCallback(() => {
+    anchorsRef.current = null
+    rerender()
+  }, [])
+  useInlineDiagramZoom(contentRef, onZoomChange)
 
   useEffect(() => {
     const seq = ++seqRef.current
@@ -99,6 +109,12 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(props, 
 
   const interact = () => propsRef.current.onUserInteract()
 
+  const onMouseOver = (e: React.MouseEvent) => {
+    if ((e.target as Element).closest('.diagram-tools')) return
+    const ph = zoomableDiagram(e.target)
+    if (ph !== hovered) setHovered(ph)
+  }
+
   return (
     <div
       className="preview-scroller"
@@ -109,8 +125,27 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(props, 
       onTouchStart={interact}
       onKeyDown={interact}
       tabIndex={-1}
+      onMouseOver={onMouseOver}
+      onMouseLeave={() => setHovered(null)}
     >
-      <article className="markdown-body" ref={contentRef} onClick={onClick} />
+      <article
+        className="markdown-body"
+        ref={contentRef}
+        onClick={onClick}
+        onDoubleClick={(e) => {
+          const ph = zoomableDiagram(e.target)
+          if (ph) setViewerSource(ph)
+        }}
+      />
+      {hovered?.isConnected && scrollerRef.current && (
+        <DiagramTools
+          target={hovered}
+          scroller={scrollerRef.current}
+          onChange={onZoomChange}
+          onFullscreen={() => setViewerSource(hovered)}
+        />
+      )}
+      {viewerSource && <MermaidViewer source={viewerSource} onClose={() => setViewerSource(null)} />}
     </div>
   )
 })

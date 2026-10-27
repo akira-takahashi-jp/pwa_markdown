@@ -41,6 +41,15 @@ async function inlinedKatexCss(): Promise<string> {
 export async function exportHtml(opts: { previewEl: HTMLElement; src: string; fileName: string; theme: 'light' | 'dark' }) {
   await renderAllMermaid(opts.previewEl)
   const clone = opts.previewEl.cloneNode(true) as HTMLElement
+  // プレビューで拡大中の図は等倍に戻して書き出す
+  clone.querySelectorAll<HTMLElement>('.mermaid-ph.is-zoomed').forEach((ph) => {
+    ph.classList.remove('is-zoomed')
+    ph.removeAttribute('data-zoom')
+    ph.removeAttribute('data-fitw')
+    const svg = ph.querySelector<SVGSVGElement>(':scope > svg')
+    svg?.style.removeProperty('width')
+    svg?.style.removeProperty('max-width')
+  })
   clone.querySelectorAll('.md-block').forEach((el) => {
     el.removeAttribute('data-source-line')
     el.removeAttribute('data-h')

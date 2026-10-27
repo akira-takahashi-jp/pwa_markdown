@@ -343,7 +343,54 @@ kbd {
 .editor-host .cm-editor { height: 100%; }
 .editor-host .cm-editor.cm-focused { outline: none; }
 
-.preview-scroller { height: 100%; overflow: auto; outline: none; background: var(--md-bg); }
+.preview-scroller { position: relative; height: 100%; overflow: auto; outline: none; background: var(--md-bg); }
+
+/* ---------- mermaid の拡大縮小 ---------- */
+.diagram-tools {
+  position: absolute;
+  z-index: 10;
+  display: flex;
+  transform: translateX(-100%);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.diagram-tools button {
+  min-width: 28px;
+  height: 26px;
+  padding: 0 6px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-size: 13px;
+}
+.diagram-tools button + button { border-left: 1px solid var(--border); }
+.diagram-tools button:hover { background: var(--bg-hover); }
+.diagram-tools-pct { min-width: 48px !important; font-variant-numeric: tabular-nums; font-size: 12px !important; color: var(--fg-muted); }
+
+.mermaid-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  background: var(--md-bg);
+}
+.mermaid-viewer-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-soft);
+}
+.mermaid-viewer-hint { flex: 1; color: var(--fg-muted); font-size: 12px; }
+.mermaid-viewer-pct { min-width: 64px; justify-content: center; font-variant-numeric: tabular-nums; }
+.mermaid-viewer-stage { position: relative; flex: 1; overflow: hidden; cursor: grab; touch-action: none; user-select: none; }
+.mermaid-viewer-stage.is-dragging { cursor: grabbing; }
+.mermaid-viewer-canvas { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 .preview-scroller > .markdown-body { max-width: 900px; margin: 0 auto; padding: 24px 32px 50vh; }
 
 /* ---------- スライド ---------- */

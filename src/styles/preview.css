@@ -99,6 +99,19 @@
 /* mermaid */
 .markdown-body .mermaid-ph { display: flex; justify-content: center; margin: 0 0 1em; min-height: 2em; }
 .markdown-body .mermaid-ph > svg { max-width: 100%; height: auto; }
+/* プレビュー内で拡大中（枠内でスクロール・ドラッグで移動） */
+.markdown-body .mermaid-ph[data-state='done']:not(.is-error) { cursor: zoom-in; }
+.markdown-body .mermaid-ph.is-zoomed {
+  justify-content: safe center;
+  align-items: flex-start;
+  max-height: 80vh;
+  overflow: auto;
+  cursor: grab;
+  border: 1px dashed var(--md-border);
+  border-radius: 6px;
+}
+.markdown-body .mermaid-ph.is-zoomed.is-dragging { cursor: grabbing; user-select: none; }
+.markdown-body .mermaid-ph.is-zoomed > svg { flex: none; }
 .markdown-body .mermaid-ph:not([data-state='done']) .mermaid-src { opacity: 0.5; width: 100%; }
 .markdown-body .mermaid-ph[data-state='done'] .mermaid-src { display: none; }
 .mermaid-error {
