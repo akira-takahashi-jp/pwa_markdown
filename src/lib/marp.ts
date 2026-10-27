@@ -63,7 +63,10 @@ export async function renderMarp(src: string): Promise<MarpResult> {
     katexCss ??= import('katex/dist/katex.min.css')
     await katexCss
   }
-  const { html, css } = appMarp.render(src)
+  const { html, css: rawCss } = appMarp.render(src)
+  // katexFontPath: false でも KaTeX の @font-face（相対パス fonts/…）が残り、アプリ側の katex.css の
+  // フォント指定を上書きして 404 になるため取り除く
+  const css = rawCss.replace(/@font-face\s*\{[^}]*KaTeX[^}]*\}/g, '')
   const slideCount = (html.match(/<svg[^>]*data-marpit-svg/g) ?? []).length
   return { html: sanitizeMarp(html), css, slideCount }
 }
