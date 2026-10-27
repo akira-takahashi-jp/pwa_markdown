@@ -32,6 +32,22 @@ npm run build      # 型チェック + 本番ビルド（dist/）
 npm run preview    # 本番ビルドの確認（http://localhost:4173）
 ```
 
+## 公開（GitHub Pages）
+
+https://akira-takahashi-jp.github.io/pwa_markdown/
+
+`main` に push すると `.github/workflows/deploy.yml` がビルドして GitHub Pages に配信します。
+プロジェクトサイトはサブパスで配信されるため、`BASE_PATH=/<リポジトリ名>/` でビルドしています（ローカル・Docker は `/` のまま）。
+
+初回のみ、リポジトリの **Settings → Pages → Build and deployment → Source** を **GitHub Actions** にしてください。
+
+サブパスでの動作をローカルで確認する場合:
+
+```bash
+BASE_PATH=/pwa_markdown/ npm run build
+BASE_PATH=/pwa_markdown/ npm run preview   # http://localhost:4173/pwa_markdown/
+```
+
 ## 機能
 
 | 分類 | 内容 |

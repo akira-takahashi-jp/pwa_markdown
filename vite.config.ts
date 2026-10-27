@@ -3,7 +3,11 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// GitHub Pages（https://<user>.github.io/pwa_markdown/）では BASE_PATH=/pwa_markdown/ でビルドする
+const base = process.env.BASE_PATH ?? '/'
+
 export default defineConfig({
+  base,
   resolve: {
     alias: [{ find: /^mathjax-full\/.*$/, replacement: fileURLToPath(new URL('./src/lib/stubs/mathjax-full.ts', import.meta.url)) }],
   },
@@ -31,8 +35,8 @@ export default defineConfig({
         short_name: 'MD Editor',
         description: 'Mermaid・Marp 対応の Markdown エディター / ビューワー',
         lang: 'ja',
-        start_url: '/',
-        scope: '/',
+        start_url: base,
+        scope: base,
         display: 'standalone',
         theme_color: '#1f6feb',
         background_color: '#ffffff',
@@ -44,7 +48,7 @@ export default defineConfig({
         ],
         file_handlers: [
           {
-            action: '/',
+            action: base,
             accept: { 'text/markdown': ['.md', '.markdown'] },
           },
         ],
@@ -54,7 +58,7 @@ export default defineConfig({
         // mermaid / Marp / KaTeX（フォント含む）/ Shiki の遅延チャンクもすべてプリキャッシュする
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2,webmanifest}'],
         maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
-        navigateFallback: '/index.html',
+        navigateFallback: `${base}index.html`,
         cleanupOutdatedCaches: true,
       },
       devOptions: {
