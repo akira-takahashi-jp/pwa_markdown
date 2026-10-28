@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { fsaUnsupportedReason, type RecentEntry, type TreeNode } from '../lib/fs'
+import { fsaUnsupportedReason, nfc, type RecentEntry, type TreeNode } from '../lib/fs'
 
 interface Props {
   rootName: string | null
@@ -86,7 +86,7 @@ export function FileTree(props: Props) {
               {props.recent.map((r) => (
                 <li key={r.openedAt + r.name}>
                   <button onClick={() => props.onOpenRecent(r)} title={new Date(r.openedAt).toLocaleString()}>
-                    {r.kind === 'directory' ? '📁' : '📄'} {r.name}
+                    {r.kind === 'directory' ? '📁' : '📄'} {nfc(r.name)}
                   </button>
                   <button className="icon-btn" onClick={() => props.onRemoveRecent(r)} title="履歴から削除">
                     ✕

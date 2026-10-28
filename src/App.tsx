@@ -16,6 +16,7 @@ import {
   addRecent,
   ensurePermission,
   getRecent,
+  nfc,
   openDirectory,
   openFiles,
   readHandle,
@@ -215,7 +216,8 @@ export default function App() {
 
   /** 文書をタブで開く。同じファイルがすでに開いていればそのタブに切り替える */
   const openDocument = useCallback(
-    async (name: string, content: string, handle: FileSystemFileHandle | null, opts: { path?: string | null } = {}) => {
+    async (rawName: string, content: string, handle: FileSystemFileHandle | null, opts: { path?: string | null } = {}) => {
+      const name = nfc(rawName)
       if (handle) {
         for (const d of docsRef.current) {
           if (d.handle && (await d.handle.isSameEntry(handle).catch(() => false))) {
@@ -312,9 +314,9 @@ export default function App() {
       const r = await saveFileAs(text, doc.name)
       if (!r) return false
       savedRef.current.set(id, text)
-      patchDoc(id, r === 'downloaded' ? { dirty: false } : { dirty: false, handle: r, name: r.name, path: null })
+      patchDoc(id, r === 'downloaded' ? { dirty: false } : { dirty: false, handle: r, name: nfc(r.name), path: null })
       autosave()
-      toast({ kind: 'success', message: r === 'downloaded' ? 'ダウンロードしました' : `${r.name} を保存しました` })
+      toast({ kind: 'success', message: r === 'downloaded' ? 'ダウンロードしました' : `${nfc(r.name)} を保存しました` })
       return true
     } catch (e) {
       reportError(e)
@@ -332,7 +334,7 @@ export default function App() {
       savedRef.current.set(id, text)
       patchDoc(id, { dirty: false })
       autosave()
-      toast({ kind: 'success', message: `${h.name} を保存しました` })
+      toast({ kind: 'success', message: `${nfc(h.name)} を保存しました` })
       return true
     } catch (e) {
       reportError(e)
@@ -698,7 +700,7 @@ export default function App() {
           <aside className="sidebar">
             <div className="tabs" role="tablist">
               <button role="tab" className={sidebarTab === 'toc' ? 'is-on' : ''} onClick={() => setSidebarTab('toc')}>
-                {marp ? 'スライド' : '目次'}
+                {marp ? 'スライド' : 'アウトライン'}
               </button>
               <button role="tab" className={sidebarTab === 'files' ? 'is-on' : ''} onClick={() => setSidebarTab('files')}>
                 ファイル
@@ -709,7 +711,7 @@ export default function App() {
                 <TocSidebar marp={marp} headings={headings} slides={slides} onHeading={jumpToHeading} onSlide={jumpToSlide} />
               ) : (
                 <FileTree
-                  rootName={dirHandle?.name ?? null}
+                  rootName={dirHandle ? nfc(dirHandle.name) : null}
                   tree={tree}
                   currentPath={activeDoc.path}
                   recent={recent}

@@ -18,6 +18,12 @@ const MD_TYPES: FilePickerAcceptType[] = [
 ]
 export const MD_EXT = /\.(md|markdown|mdown|mkd)$/i
 
+/**
+ * ファイル名を NFC に正規化する。macOS のファイル名は NFD（濁点・半濁点が分離した形）で返るため、
+ * そのまま表示すると「ガ」が「カ゛」のように崩れたり、比較・並べ替えがずれたりする
+ */
+export const nfc = (name: string) => name.normalize('NFC')
+
 export interface OpenedFile {
   name: string
   content: string
@@ -36,7 +42,7 @@ export async function ensurePermission(handle: FileSystemHandle, mode: FileSyste
 
 export async function readHandle(handle: FileSystemFileHandle): Promise<OpenedFile> {
   const file = await handle.getFile()
-  return { name: file.name, content: await file.text(), handle }
+  return { name: nfc(file.name), content: await file.text(), handle }
 }
 
 /** ファイルを開く（複数選択可）。FSA 非対応なら input[type=file] で読み込む */
@@ -53,7 +59,7 @@ export async function openFiles(): Promise<OpenedFile[]> {
     }
   }
   const files = await pickFilesFallback()
-  return Promise.all(files.map(async (f) => ({ name: f.name, content: await f.text(), handle: null })))
+  return Promise.all(files.map(async (f) => ({ name: nfc(f.name), content: await f.text(), handle: null })))
 }
 
 function pickFilesFallback(): Promise<File[]> {
@@ -156,13 +162,14 @@ export async function readTree(dir: FileSystemDirectoryHandle, path = '', depth 
   const nodes: TreeNode[] = []
   if (depth > 10) return nodes
   for await (const entry of dir.values()) {
-    const p = path ? `${path}/${entry.name}` : entry.name
+    const name = nfc(entry.name)
+    const p = path ? `${path}/${name}` : name
     if (entry.kind === 'directory') {
-      if (entry.name.startsWith('.') || SKIP_DIRS.has(entry.name)) continue
+      if (name.startsWith('.') || SKIP_DIRS.has(name)) continue
       const children = await readTree(entry, p, depth + 1)
-      if (children.length) nodes.push({ name: entry.name, path: p, kind: 'directory', handle: entry, children })
-    } else if (MD_EXT.test(entry.name)) {
-      nodes.push({ name: entry.name, path: p, kind: 'file', handle: entry })
+      if (children.length) nodes.push({ name, path: p, kind: 'directory', handle: entry, children })
+    } else if (MD_EXT.test(name)) {
+      nodes.push({ name, path: p, kind: 'file', handle: entry })
     }
   }
   return nodes.sort((a, b) =>
@@ -197,7 +204,7 @@ export async function addRecent(handle: FileSystemFileHandle | FileSystemDirecto
     }
     rest.push(r)
   }
-  const next = [{ name: handle.name, kind: handle.kind, handle, openedAt: Date.now() }, ...rest].slice(0, RECENT_MAX)
+  const next = [{ name: nfc(handle.name), kind: handle.kind, handle, openedAt: Date.now() }, ...rest].slice(0, RECENT_MAX)
   await set(RECENT_KEY, next, store)
   window.dispatchEvent(new Event('recent-changed'))
 }
@@ -249,10 +256,10 @@ export async function writeSession(data: SessionData): Promise<void> {
 
 export async function readSession(): Promise<SessionData | undefined> {
   const session = await get<SessionData>(SESSION_KEY, store)
-  if (session?.docs?.length) return session
+  if (session?.docs?.length) return { ...session, docs: session.docs.map((d) => ({ ...d, name: nfc(d.name), path: d.path && nfc(d.path) })) }
   const legacy = await get<LegacyAutosave>(LEGACY_AUTOSAVE_KEY, store)
   if (!legacy) return undefined
   await del(LEGACY_AUTOSAVE_KEY, store)
-  const doc = { id: 'restored', name: legacy.name, content: legacy.content, handle: legacy.handle, path: null, dirty: legacy.dirty }
+  const doc = { id: 'restored', name: nfc(legacy.name), content: legacy.content, handle: legacy.handle, path: null, dirty: legacy.dirty }
   return { docs: [doc], activeId: doc.id, savedAt: legacy.savedAt }
 }
