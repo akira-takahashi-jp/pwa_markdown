@@ -25,7 +25,20 @@ interface Props {
   onHelp(): void
 }
 
-/** クリックで開閉し、外側クリックで閉じるドロップダウン */
+/** サイドバーの開閉アイコン（左に区切りのあるパネル） */
+function SidebarIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden="true">
+      <rect x="1.5" y="2" width="13" height="12" rx="2" />
+      <line x1="6" y1="2" x2="6" y2="14" />
+    </svg>
+  )
+}
+
+/**
+ * メニューバーのメニュー。クリックで開閉し、外側クリックで閉じる。
+ * 別のメニューが開いているときはホバーだけで切り替わる（デスクトップアプリのメニューバーと同じ）
+ */
 function Menu({ label, title, children }: { label: ReactNode; title: string; children: ReactNode }) {
   const ref = useRef<HTMLDetailsElement>(null)
   useEffect(() => {
@@ -36,8 +49,18 @@ function Menu({ label, title, children }: { label: ReactNode; title: string; chi
     return () => document.removeEventListener('mousedown', close)
   }, [])
   return (
-    <details className="menu" ref={ref}>
-      <summary className="btn" title={title}>
+    <details
+      className="menu"
+      ref={ref}
+      onMouseEnter={() => {
+        const opened = ref.current?.parentElement?.querySelector<HTMLDetailsElement>(':scope > details.menu[open]')
+        if (opened && opened !== ref.current) {
+          opened.open = false
+          ref.current!.open = true
+        }
+      }}
+    >
+      <summary className="menu-trigger" title={title}>
         {label}
       </summary>
       <div className="menu-list" onClick={() => ref.current && (ref.current.open = false)}>
@@ -53,7 +76,7 @@ export function Toolbar(p: Props) {
   return (
     <header className="toolbar">
       <button className={`icon-btn${p.sidebarOpen ? ' is-on' : ''}`} onClick={p.onToggleSidebar} title="サイドバー (Ctrl+B)">
-        ☰
+        <SidebarIcon />
       </button>
       <Menu label="ファイル" title="ファイル">
         <button onClick={p.onNew}>

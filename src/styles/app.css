@@ -79,6 +79,7 @@ kbd {
 .btn-primary:hover { background: var(--accent); filter: brightness(1.1); }
 .icon-btn { border-color: transparent; background: transparent; padding: 4px 8px; }
 .icon-btn.is-on { background: var(--bg-hover); }
+.icon-btn svg { display: block; }
 
 /* ---------- ツールバー ---------- */
 .toolbar {
@@ -117,7 +118,14 @@ kbd {
 .menu { position: relative; }
 .menu > summary { list-style: none; }
 .menu > summary::-webkit-details-marker { display: none; }
-.menu[open] > summary { background: var(--bg-hover); }
+.menu-trigger {
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: default;
+  user-select: none;
+  white-space: nowrap;
+}
+.menu-trigger:hover, .menu[open] > .menu-trigger { background: var(--bg-hover); }
 .menu-list {
   position: absolute;
   top: calc(100% + 4px);
@@ -142,6 +150,8 @@ kbd {
   cursor: pointer;
   text-align: left;
 }
+.menu-list button { white-space: nowrap; align-items: center; }
+.menu-list kbd { border: 0; background: none; padding: 0; font-family: var(--font-ui); font-size: 12px; }
 .menu-list button:hover:not(:disabled) { background: var(--bg-hover); }
 .menu-list button:disabled { opacity: 0.5; cursor: default; }
 .menu-list hr { border: 0; border-top: 1px solid var(--border); margin: 4px 0; }
