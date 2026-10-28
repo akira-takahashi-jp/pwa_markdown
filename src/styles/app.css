@@ -313,6 +313,7 @@ kbd {
 .toc-num { display: inline-block; min-width: 1.8em; color: var(--fg-muted); }
 .tree ul { padding-left: 14px; }
 .tree-caret { display: inline-block; width: 1em; color: var(--fg-muted); }
+.tree-dir.is-empty { color: var(--fg-muted); }
 .tree-file.is-active { background: color-mix(in srgb, var(--accent) 18%, transparent); font-weight: 600; }
 .panel-head {
   display: flex;

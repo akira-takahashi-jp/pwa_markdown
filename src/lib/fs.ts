@@ -142,6 +142,8 @@ export interface TreeNode {
   kind: 'file' | 'directory'
   handle: FileSystemFileHandle | FileSystemDirectoryHandle
   children?: TreeNode[]
+  /** フォルダ配下（サブフォルダ含む）の .md ファイル数 */
+  mdCount?: number
 }
 
 const SKIP_DIRS = new Set(['node_modules', '.git', '.svn', '.hg', 'dist', 'build', '.next', '.cache', '.venv', '__pycache__'])
@@ -157,7 +159,7 @@ export async function openDirectory(): Promise<FileSystemDirectoryHandle | null>
   }
 }
 
-/** .md ファイルだけを含むツリーを作る（.md を含まないフォルダは省く） */
+/** フォルダと .md ファイルのツリーを作る（.md 以外のファイルは省く） */
 export async function readTree(dir: FileSystemDirectoryHandle, path = '', depth = 0): Promise<TreeNode[]> {
   const nodes: TreeNode[] = []
   if (depth > 10) return nodes
@@ -167,7 +169,8 @@ export async function readTree(dir: FileSystemDirectoryHandle, path = '', depth 
     if (entry.kind === 'directory') {
       if (name.startsWith('.') || SKIP_DIRS.has(name)) continue
       const children = await readTree(entry, p, depth + 1)
-      if (children.length) nodes.push({ name, path: p, kind: 'directory', handle: entry, children })
+      const mdCount = children.reduce((n, c) => n + (c.kind === 'file' ? 1 : (c.mdCount ?? 0)), 0)
+      nodes.push({ name, path: p, kind: 'directory', handle: entry, children, mdCount })
     } else if (MD_EXT.test(name)) {
       nodes.push({ name, path: p, kind: 'file', handle: entry })
     }

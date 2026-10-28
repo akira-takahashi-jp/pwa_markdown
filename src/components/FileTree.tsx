@@ -15,14 +15,21 @@ interface Props {
 }
 
 function Node({ node, currentPath, onOpenFile }: { node: TreeNode; currentPath: string | null; onOpenFile(n: TreeNode): void }) {
-  const [open, setOpen] = useState(true)
+  // .md を含まないフォルダは閉じた状態で薄く表示する
+  const hasMd = node.kind === 'directory' && (node.mdCount ?? 0) > 0
+  const [open, setOpen] = useState(hasMd)
   if (node.kind === 'directory') {
+    const empty = !node.children?.length
     return (
       <li>
-        <button className="tree-dir" onClick={() => setOpen(!open)}>
-          <span className="tree-caret">{open ? '▾' : '▸'}</span>📁 {node.name}
+        <button
+          className={`tree-dir${hasMd ? '' : ' is-empty'}`}
+          onClick={() => setOpen(!open)}
+          title={hasMd ? node.path : `${node.path}（.md ファイルなし）`}
+        >
+          <span className="tree-caret">{empty ? '' : open ? '▾' : '▸'}</span>📁 {node.name}
         </button>
-        {open && (
+        {open && !empty && (
           <ul>
             {node.children?.map((c) => <Node key={c.path} node={c} currentPath={currentPath} onOpenFile={onOpenFile} />)}
           </ul>
