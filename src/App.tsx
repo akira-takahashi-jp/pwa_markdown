@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import { Editor, type EditorHandle } from './components/Editor'
 import { FileTree } from './components/FileTree'
+import { GitHubPanel } from './components/GitHubPanel'
 import { HelpDialog } from './components/HelpDialog'
 import { PresentationMode } from './components/PresentationMode'
 import { Preview } from './components/Preview'
@@ -31,6 +32,7 @@ import {
   type RecentEntry,
   type TreeNode,
 } from './lib/fs'
+import { ghKey, saveDraft, type CommitResult, type GhDraft, type GhRef } from './lib/github'
 import { debounce } from './lib/hash'
 import type { Heading } from './lib/markdown'
 import { slideStartLines } from './lib/marp'
@@ -100,7 +102,7 @@ export default function App() {
 
   const [viewMode, setViewMode] = usePersistentState<ViewMode>('md-editor:view', 'split')
   const [sidebarOpen, setSidebarOpen] = usePersistentState('md-editor:sidebar', true)
-  const [sidebarTab, setSidebarTab] = usePersistentState<'toc' | 'files'>('md-editor:sidebar-tab', 'toc')
+  const [sidebarTab, setSidebarTab] = usePersistentState<'toc' | 'files' | 'github'>('md-editor:sidebar-tab', 'toc')
   const [ratio, setRatio] = usePersistentState('md-editor:ratio', 0.5)
 
   const [headings, setHeadings] = useState<Heading[]>([])
@@ -211,14 +213,18 @@ export default function App() {
   /** 何も書いていない untitled タブ（新しく開いた文書で置き換える） */
   const isPristine = (d: DocMeta) => {
     const text = contentsRef.current.get(d.id) ?? ''
-    return !d.handle && !d.dirty && (text === '' || text === WELCOME)
+    return !d.handle && !d.gh && !d.dirty && (text === '' || text === WELCOME)
   }
 
   /** 文書をタブで開く。同じファイルがすでに開いていればそのタブに切り替える */
   const openDocument = useCallback(
-    async (rawName: string, content: string, handle: FileSystemFileHandle | null, opts: { path?: string | null } = {}) => {
+    async (rawName: string, content: string, handle: FileSystemFileHandle | null, opts: { path?: string | null; gh?: GhRef } = {}) => {
       const name = nfc(rawName)
-      if (handle) {
+      if (opts.gh) {
+        const key = ghKey(opts.gh)
+        const same = docsRef.current.find((d) => d.gh && ghKey(d.gh) === key)
+        if (same) return activate(same.id)
+      } else if (handle) {
         for (const d of docsRef.current) {
           if (d.handle && (await d.handle.isSameEntry(handle).catch(() => false))) {
             if (opts.path && !d.path) patchDoc(d.id, { path: opts.path })
@@ -228,7 +234,7 @@ export default function App() {
         }
       } else {
         // ハンドルのないファイル（ドロップ・非対応ブラウザ）は名前と内容が同じなら同一とみなす
-        const same = docsRef.current.find((d) => !d.handle && d.name === name && contentsRef.current.get(d.id) === content)
+        const same = docsRef.current.find((d) => !d.handle && !d.gh && d.name === name && contentsRef.current.get(d.id) === content)
         if (same) return activate(same.id)
       }
       const current = docsRef.current.find((d) => d.id === activeIdRef.current)
@@ -236,7 +242,7 @@ export default function App() {
       const id = newId()
       contentsRef.current.set(id, content)
       savedRef.current.set(id, content)
-      const doc: DocMeta = { id, name, handle, path: opts.path ?? null, dirty: false }
+      const doc: DocMeta = { id, name, handle, path: opts.path ?? null, dirty: false, gh: opts.gh ?? null }
       const list = [...docsRef.current]
       const at = list.findIndex((d) => d.id === activeIdRef.current)
       list.splice(at + 1, 0, doc)
@@ -253,10 +259,10 @@ export default function App() {
   )
 
   const closeDoc = useCallback(
-    (id: string) => {
+    (id: string, force = false) => {
       const doc = docsRef.current.find((d) => d.id === id)
       if (!doc) return
-      if (doc.dirty && !window.confirm(`「${doc.name}」の変更を保存せずに閉じますか？`)) return
+      if (doc.dirty && !force && !window.confirm(`「${doc.name}」の変更を保存せずに閉じますか？`)) return
       const index = docsRef.current.indexOf(doc)
       let rest = docsRef.current.filter((d) => d.id !== id)
       if (rest.length === 0) {
@@ -314,7 +320,7 @@ export default function App() {
       const r = await saveFileAs(text, doc.name)
       if (!r) return false
       savedRef.current.set(id, text)
-      patchDoc(id, r === 'downloaded' ? { dirty: false } : { dirty: false, handle: r, name: nfc(r.name), path: null })
+      patchDoc(id, r === 'downloaded' ? { dirty: false } : { dirty: false, handle: r, name: nfc(r.name), path: null, gh: null })
       autosave()
       toast({ kind: 'success', message: r === 'downloaded' ? 'ダウンロードしました' : `${nfc(r.name)} を保存しました` })
       return true
@@ -324,9 +330,33 @@ export default function App() {
     }
   }, [autosave, patchDoc, reportError, toast])
 
+  /** GitHub のファイルはローカルに下書きとして一時保存する（コミットは別操作） */
+  const saveGhDraft = useCallback(
+    async (id: string, gh: GhRef) => {
+      const text = contentsRef.current.get(id) ?? ''
+      const kept = await saveDraft(gh, text)
+      savedRef.current.set(id, text)
+      patchDoc(id, { dirty: false })
+      autosave()
+      return kept
+    },
+    [autosave, patchDoc],
+  )
+
   const doSave = useCallback(async () => {
     const id = activeIdRef.current
-    const h = docsRef.current.find((d) => d.id === id)?.handle
+    const doc = docsRef.current.find((d) => d.id === id)
+    if (doc?.gh) {
+      try {
+        const kept = await saveGhDraft(id, doc.gh)
+        toast({ kind: 'success', message: kept ? `${doc.name} を一時保存しました（未コミット）` : `${doc.name} は元の内容と同じです` })
+        return true
+      } catch (e) {
+        reportError(e)
+        return false
+      }
+    }
+    const h = doc?.handle
     if (!h) return doSaveAs()
     try {
       const text = contentsRef.current.get(id) ?? ''
@@ -340,7 +370,7 @@ export default function App() {
       reportError(e)
       return false
     }
-  }, [autosave, doSaveAs, patchDoc, reportError, toast])
+  }, [autosave, doSaveAs, patchDoc, reportError, saveGhDraft, toast])
 
   const loadTree = useCallback(
     async (dir: FileSystemDirectoryHandle) => {
@@ -437,6 +467,39 @@ export default function App() {
       }
     },
     [loadTree, openDocument, reportError, setSidebarOpen, setSidebarTab],
+  )
+
+  /* ---------------- GitHub ---------------- */
+
+  const openGhFile = useCallback(
+    async (name: string, content: string, gh: GhRef) => openDocument(name, content, null, { gh }),
+    [openDocument],
+  )
+
+  const flushGhDrafts = useCallback(async () => {
+    for (const d of docsRef.current) if (d.gh && d.dirty) await saveGhDraft(d.id, d.gh)
+  }, [saveGhDraft])
+
+  const onGhCommitted = useCallback(
+    (drafts: GhDraft[], result: CommitResult) => {
+      const committed = new Map(drafts.map((d) => [ghKey(d), d]))
+      for (const doc of docsRef.current) {
+        const draft = doc.gh && committed.get(ghKey(doc.gh))
+        if (!draft || !doc.gh) continue
+        savedRef.current.set(doc.id, draft.content)
+        patchDoc(doc.id, { gh: { ...doc.gh, sha: result.shas[draft.path] }, dirty: contentsRef.current.get(doc.id) !== draft.content })
+      }
+      autosave()
+    },
+    [autosave, patchDoc],
+  )
+
+  const onGhDiscarded = useCallback(
+    (keys: string[]) => {
+      // 破棄した下書きを開いているタブは閉じる（開き直すとリモートの内容になる）
+      for (const d of [...docsRef.current]) if (d.gh && keys.includes(ghKey(d.gh))) closeDoc(d.id, true)
+    },
+    [closeDoc],
   )
 
   /* ---------------- エクスポート ---------------- */
@@ -538,7 +601,7 @@ export default function App() {
             // 未保存だった文書は保存時の内容が分からないので、どの内容とも一致しない扱いにする
             if (!d.dirty) savedRef.current.set(d.id, d.content)
           }
-          setDocs(session.docs.map(({ id, name, handle, path, dirty }) => ({ id, name, handle, path, dirty })))
+          setDocs(session.docs.map(({ id, name, handle, path, dirty, gh }) => ({ id, name, handle, path, dirty, gh: gh ?? null })))
           const active = session.docs.some((d) => d.id === session.activeId) ? session.activeId : session.docs[0].id
           activate(active)
           contentsRef.current.delete(WELCOME_ID)
@@ -705,10 +768,23 @@ export default function App() {
               <button role="tab" className={sidebarTab === 'files' ? 'is-on' : ''} onClick={() => setSidebarTab('files')}>
                 ファイル
               </button>
+              <button role="tab" className={sidebarTab === 'github' ? 'is-on' : ''} onClick={() => setSidebarTab('github')}>
+                GitHub
+              </button>
             </div>
             <div className="sidebar-body">
               {sidebarTab === 'toc' ? (
                 <TocSidebar marp={marp} headings={headings} slides={slides} onHeading={jumpToHeading} onSlide={jumpToSlide} />
+              ) : sidebarTab === 'github' ? (
+                <GitHubPanel
+                  current={activeDoc.gh ?? null}
+                  onOpen={openGhFile}
+                  onBeforeCommit={flushGhDrafts}
+                  onCommitted={onGhCommitted}
+                  onDiscarded={onGhDiscarded}
+                  onError={reportError}
+                  onToast={(message) => toast({ kind: 'success', message })}
+                />
               ) : (
                 <FileTree
                   rootName={dirHandle ? nfc(dirHandle.name) : null}

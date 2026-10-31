@@ -4,3 +4,6 @@ dev-dist
 *.local
 .DS_Store
 *.tsbuildinfo
+
+# ローカルのポート設定など
+.env

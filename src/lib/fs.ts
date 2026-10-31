@@ -1,4 +1,5 @@
 import { createStore, del, get, set } from 'idb-keyval'
+import type { GhRef } from './github'
 
 const store = createStore('md-editor', 'kv')
 
@@ -232,6 +233,7 @@ export interface SessionDoc {
   handle: FileSystemFileHandle | null
   path: string | null
   dirty: boolean
+  gh?: GhRef | null
 }
 
 /** 開いているタブすべての内容 */

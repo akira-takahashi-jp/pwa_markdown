@@ -57,8 +57,17 @@ BASE_PATH=/pwa_markdown/ npm run preview   # http://localhost:4173/pwa_markdown/
 | Mermaid | ```` ```mermaid ```` を SVG に描画。構文エラーは図の位置にメッセージ表示。ライト/ダーク連動。コードのハッシュでキャッシュし、画面に近づいたときに遅延描画 |
 | Marp | front-matter の `marp: true` でスライドモード。default / gaia / uncover テーマ、`<style>` のカスタム CSS、スライド内 mermaid、プレゼンテーション（F5、矢印キー、Esc） |
 | ファイル | 開く（複数選択可）/上書き保存/名前を付けて保存、フォルダツリー、最近使ったファイル（権限は再要求）、ドラッグ＆ドロップ（複数可）、全タブの IndexedDB への自動退避と次回起動時の復元、未保存時の ● 表示と離脱確認、非対応ブラウザ向けフォールバック |
+| GitHub | 認証キー（Fine-grained token）を登録してリポジトリ・ブランチを選ぶと、.md のツリーをサイドバーに表示。編集して保存（Ctrl+S）すると下書きとしてローカルに一時保存し、次回も続きから編集可能。下書きはまとめて 1 つのコミットにできる（新規ファイルにも対応） |
 | エクスポート | 単一 HTML（スタイル・KaTeX フォント・mermaid SVG を埋め込み）、PDF（印刷、Marp は 1 スライド 1 ページ）、Marp スライド HTML |
 | PWA | 全チャンク（mermaid / Marp / KaTeX フォント / Shiki 言語）のプリキャッシュ、インストール、`file_handlers`（OS から .md を開く）、「更新があります」トースト |
+
+### GitHub 連携の使い方
+
+1. GitHub の [Fine-grained token の発行画面](https://github.com/settings/personal-access-tokens/new) で、Repository access に対象のリポジトリを選び、Permissions の **Contents** を **Read and write** にして発行します。
+2. サイドバーの「GitHub」タブにキーを貼り付けて接続します。キーはブラウザの IndexedDB にだけ保存され、GitHub の API 以外には送信しません（「⏏」で削除できます）。
+3. リポジトリ（`owner/repo`）とブランチを選ぶと、.md ファイルのツリーが表示されます。
+4. 開いたファイルを編集して保存すると、下書き（未コミットの変更）として一時保存されます。ツリーでは ● が付き、閉じても次に開いたときは下書きの内容で開きます。
+5. 「コミット」で下書きを選んで 1 つのコミットにまとめ、ブランチに積みます。編集を始めた後に同じファイルがリモートで変更されていた場合はコミットせずに知らせます（他のファイルの変更は問題ありません）。
 
 ショートカット一覧はアプリ内の **?** ボタン（または F1）から確認できます。
 
@@ -78,7 +87,7 @@ BASE_PATH=/pwa_markdown/ npm run preview   # http://localhost:4173/pwa_markdown/
 
 ```
 src/
-  components/  Editor, Preview, SlidePreview, PresentationMode, Toolbar, FileTree, TocSidebar, HelpDialog, Toast
+  components/  Editor, Preview, SlidePreview, PresentationMode, Toolbar, FileTree, GitHubPanel, TocSidebar, HelpDialog, Toast
   lib/
     markdown.ts   markdown-it の設定（ブロック単位で描画）
     blocks.ts     プレビューのブロック単位の差分更新
@@ -86,6 +95,7 @@ src/
     mermaid.ts    描画・キャッシュ・遅延描画
     marp.ts       marp-core の設定と mermaid 連携
     fs.ts         File System Access API と IndexedDB
+    github.ts     GitHub REST API（ツリー・blob・コミット）と下書きの保存
     export.ts     HTML / PDF 書き出し
     sanitize.ts   DOMPurify の設定
   styles/       app.css / preview.css / print.css
@@ -101,3 +111,4 @@ samples/        動作確認用 Markdown
 - **大きなファイル**: markdown-it のトークンをトップレベルのブロック単位で描画し、HTML のハッシュが同じブロックは DOM を使い回します（5,000 行で 1 回の更新 ~140ms → 50ms 未満）。
 - **ショートカット**: `Ctrl+N` / `Ctrl+W` / `Ctrl+Tab` / `Ctrl+Shift+O` はブラウザが奪うため、新規は `Ctrl+Alt+N`、タブを閉じるは `Ctrl+Alt+W`、タブ切り替えは `Ctrl+Alt+→/←`、フォルダは `Ctrl+Alt+O` にしています。
 - **タブ**: CodeMirror の EditorView は 1 つだけで、タブごとの `EditorState` を `setState` で切り替えています。同じファイルを再度開くと既存のタブに切り替わります（`isSameEntry` で判定）。
+- **GitHub のコミット**: Git Data API で blob → tree（`base_tree` に差分だけ載せる）→ commit → ref の更新（`force: false`）の順に作ります。下書きには編集元の blob SHA を持たせ、最新のツリーと比べて競合を検出します。ref の更新が fast-forward にならなかったときは最新から作り直します。

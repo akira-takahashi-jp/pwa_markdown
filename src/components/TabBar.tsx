@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import type { GhRef } from '../lib/github'
 
 export interface DocMeta {
   id: string
@@ -7,6 +8,8 @@ export interface DocMeta {
   /** 開いたフォルダ内の相対パス（ツリーのハイライト用） */
   path: string | null
   dirty: boolean
+  /** GitHub 上のファイル（保存先はローカルの下書き） */
+  gh?: GhRef | null
 }
 
 interface Props {
@@ -42,7 +45,7 @@ export function TabBar({ docs, activeId, onSelect, onClose, onNew }: Props) {
             role="tab"
             aria-selected={d.id === activeId}
             className={`doc-tab${d.id === activeId ? ' is-active' : ''}${d.dirty ? ' is-dirty' : ''}`}
-            title={d.path ?? d.name}
+            title={d.gh ? `${d.gh.owner}/${d.gh.repo}@${d.gh.branch}: ${d.gh.path}` : (d.path ?? d.name)}
             onMouseDown={(e) => {
               if (e.button === 0) onSelect(d.id)
             }}
@@ -54,7 +57,10 @@ export function TabBar({ docs, activeId, onSelect, onClose, onNew }: Props) {
               }
             }}
           >
-            <span className="doc-tab-name">{d.name}</span>
+            <span className="doc-tab-name">
+              {d.gh && <span className="doc-tab-gh">GH</span>}
+              {d.name}
+            </span>
             <button
               className="doc-tab-close"
               onMouseDown={(e) => e.stopPropagation()}
