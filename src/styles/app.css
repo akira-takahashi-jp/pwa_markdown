@@ -44,6 +44,7 @@ body {
 
 body.is-resizing { cursor: col-resize; user-select: none; }
 body.is-resizing iframe, body.is-resizing .pane { pointer-events: none; }
+body.is-resizing-v { cursor: row-resize; user-select: none; }
 
 button { font: inherit; color: inherit; }
 kbd {
@@ -281,18 +282,27 @@ kbd {
   background: var(--bg-soft);
   min-height: 0;
 }
-.tabs { display: flex; border-bottom: 1px solid var(--border); }
-.tabs button {
-  flex: 1;
-  padding: 8px;
+.side-section { display: flex; flex-direction: column; min-height: 0; flex: 0 0 auto; }
+.side-section.is-open { flex: 1 1 0; }
+.side-section + .side-section, .side-splitter + .side-section { border-top: 1px solid var(--border); }
+.side-head {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 6px 8px;
   border: 0;
-  border-bottom: 2px solid transparent;
   background: none;
+  color: var(--fg);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-align: left;
   cursor: pointer;
-  color: var(--fg-muted);
 }
-.tabs button.is-on { color: var(--fg); border-bottom-color: var(--accent); font-weight: 600; }
-.sidebar-body { flex: 1; overflow: auto; padding: 6px 0; }
+.side-head:hover { background: var(--bg-hover); }
+.side-body { flex: 1; overflow: auto; padding-bottom: 6px; min-height: 0; }
+.side-splitter { flex: none; height: 5px; margin: -2px 0; z-index: 2; cursor: row-resize; }
+.side-splitter:hover { background: color-mix(in srgb, var(--accent) 40%, transparent); }
 .sidebar .empty { padding: 8px 14px; color: var(--fg-muted); font-size: 13px; }
 
 .toc, .tree, .tree ul, .recent { list-style: none; margin: 0; padding: 0; }
@@ -326,7 +336,12 @@ kbd {
   color: var(--fg-muted);
 }
 .panel-head > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.file-panel section + section { border-top: 1px solid var(--border); margin-top: 8px; padding-top: 4px; }
+.explorer section + section { border-top: 1px solid var(--border); margin-top: 8px; padding-top: 4px; }
+.project-title { padding: 2px 14px 6px; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.explorer-empty { display: flex; flex-direction: column; gap: 6px; padding: 4px 14px 8px; }
+.explorer-empty p { margin: 0 0 4px; color: var(--fg-muted); font-size: 13px; }
+.explorer-empty .btn { text-align: left; }
+.recent-badge { margin-left: 6px; color: var(--accent); font-size: 11px; }
 .recent li { display: flex; align-items: center; }
 .recent li button:first-child { flex: 1; min-width: 0; }
 .recent .icon-btn { visibility: hidden; font-size: 11px; }
@@ -500,8 +515,21 @@ div.marpit .mermaid-error { font-size: 0.5em; color: #b91c1c; }
   color: var(--fg-muted);
   vertical-align: 1px;
 }
-.gh-select { display: flex; flex-direction: column; gap: 6px; padding: 2px 14px 8px; }
-.gh-select input, .gh-select select, .gh-token input, .gh-commit textarea {
+.gh-branch { display: flex; align-items: center; gap: 2px; padding: 0 8px 6px 14px; }
+.gh-branch select { flex: 1; min-width: 0; }
+.panel-subhead { margin-top: 6px; }
+.gh-open { width: min(480px, calc(100vw - 32px)); }
+.gh-open-body { display: flex; flex-direction: column; gap: 12px; padding: 16px; font-size: 13px; }
+.gh-open-body label { display: flex; flex-direction: column; gap: 4px; color: var(--fg-muted); }
+.gh-open footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
+.gh-key-info { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0; }
+.gh-key-info dt { color: var(--fg-muted); }
+.gh-key-info dd { margin: 0; word-break: break-all; }
+.gh-account { margin: 0; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.link-btn { padding: 0; border: 0; background: none; color: var(--accent); cursor: pointer; font: inherit; }
+.link-btn:hover { text-decoration: underline; }
+.gh-token-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.gh-branch select, .gh-open input, .gh-open select, .gh-token input, .gh-commit textarea {
   width: 100%;
   box-sizing: border-box;
   padding: 5px 8px;
@@ -522,7 +550,7 @@ div.marpit .mermaid-error { font-size: 0.5em; color: #b91c1c; }
   font-weight: 600;
 }
 .gh-commit-btn { padding: 2px 8px; font-size: 12px; text-transform: none; }
-.gh-token { display: flex; flex-direction: column; gap: 8px; padding: 8px 14px; font-size: 13px; }
+.gh-token { display: flex; flex-direction: column; gap: 8px; padding: 16px; font-size: 13px; }
 .gh-token p, .gh-token ol { margin: 0; }
 .gh-token ol { padding-left: 18px; color: var(--fg-muted); }
 .gh-token ol li { margin-bottom: 4px; }

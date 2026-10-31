@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import { Editor, type EditorHandle } from './components/Editor'
-import { FileTree } from './components/FileTree'
-import { GitHubPanel } from './components/GitHubPanel'
+import { Explorer } from './components/Explorer'
+import { GitHubKeyDialog, GitHubOpenDialog } from './components/GitHub'
 import { HelpDialog } from './components/HelpDialog'
 import { PresentationMode } from './components/PresentationMode'
 import { Preview } from './components/Preview'
@@ -16,7 +16,10 @@ import { isMarp } from './lib/frontmatter'
 import {
   addRecent,
   ensurePermission,
+  getCurrentProject,
   getRecent,
+  githubProject,
+  handleProject,
   nfc,
   openDirectory,
   openFiles,
@@ -27,8 +30,11 @@ import {
   fsaUnsupportedReason,
   supportsFSA,
   readSession,
+  setCurrentProject,
   writeHandle,
   writeSession,
+  type OpenedFile,
+  type Project,
   type RecentEntry,
   type TreeNode,
 } from './lib/fs'
@@ -96,19 +102,27 @@ export default function App() {
   const fileName = activeDoc.name
   const activeContent = () => contentsRef.current.get(activeIdRef.current) ?? ''
 
-  const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null)
+  /** エクスプローラで開いているプロジェクト（ファイル・フォルダ・GitHub リポジトリ） */
+  const [project, setProjectState] = useState<Project | null>(null)
+  const projectRef = useRef(project)
+  const [needsPermission, setNeedsPermission] = useState(false)
   const [tree, setTree] = useState<TreeNode[]>([])
   const [recent, setRecent] = useState<RecentEntry[]>([])
 
   const [viewMode, setViewMode] = usePersistentState<ViewMode>('md-editor:view', 'split')
   const [sidebarOpen, setSidebarOpen] = usePersistentState('md-editor:sidebar', true)
-  const [sidebarTab, setSidebarTab] = usePersistentState<'toc' | 'files' | 'github'>('md-editor:sidebar-tab', 'toc')
+  const [explorerOpen, setExplorerOpen] = usePersistentState('md-editor:explorer-open', true)
+  const [outlineOpen, setOutlineOpen] = usePersistentState('md-editor:outline-open', true)
+  /** サイドバーの上下の比率（エクスプローラの割合） */
+  const [sideSplit, setSideSplit] = usePersistentState('md-editor:side-split', 0.6)
   const [ratio, setRatio] = usePersistentState('md-editor:ratio', 0.5)
 
   const [headings, setHeadings] = useState<Heading[]>([])
   const [slides, setSlides] = useState<SlideInfo[]>([])
   const [toasts, setToasts] = useState<ToastItem[]>([])
   const [helpOpen, setHelpOpen] = useState(false)
+  const [ghDialogOpen, setGhDialogOpen] = useState(false)
+  const [ghKeyDialogOpen, setGhKeyDialogOpen] = useState(false)
   const [presenting, setPresenting] = useState<number | null>(null)
   const [dragOver, setDragOver] = useState(false)
 
@@ -304,14 +318,6 @@ export default function App() {
     editorRef.current?.focus()
   }, [activate, setDocs])
 
-  const doOpen = useCallback(async () => {
-    try {
-      for (const f of await openFiles()) await openDocument(f.name, f.content, f.handle)
-    } catch (e) {
-      reportError(e)
-    }
-  }, [openDocument, reportError])
-
   const doSaveAs = useCallback(async () => {
     const id = activeIdRef.current
     const doc = docsRef.current.find((d) => d.id === id)!
@@ -383,19 +389,61 @@ export default function App() {
     [reportError],
   )
 
+  /* ---------------- プロジェクト ---------------- */
+
+  /** プロジェクトを開く（null で閉じる）。最近のプロジェクトに加え、次回起動時にも開き直す */
+  const openProject = useCallback(
+    async (p: Project | null) => {
+      projectRef.current = p
+      setProjectState(p)
+      setTree([])
+      setNeedsPermission(false)
+      void setCurrentProject(p).catch(() => undefined)
+      if (!p) return
+      setSidebarOpen(true)
+      setExplorerOpen(true)
+      await addRecent(p)
+      if (p.kind === 'directory') await loadTree(p.handle)
+    },
+    [loadTree, setExplorerOpen, setSidebarOpen],
+  )
+
+  /**
+   * ローカルのファイルをタブで開く。開いているフォルダ内のファイルならフォルダはそのまま、
+   * それ以外はそのファイルを現在のプロジェクトにする
+   */
+  const openLocalFile = useCallback(
+    async (f: OpenedFile) => {
+      const cur = projectRef.current
+      if (f.handle && cur?.kind === 'directory') {
+        const parts = await cur.handle.resolve(f.handle).catch(() => null)
+        if (parts) return openDocument(f.name, f.content, f.handle, { path: parts.map(nfc).join('/') })
+      }
+      await openDocument(f.name, f.content, f.handle)
+      if (f.handle) await openProject(handleProject(f.handle))
+    },
+    [openDocument, openProject],
+  )
+
+  const doOpen = useCallback(async () => {
+    try {
+      for (const f of await openFiles()) await openLocalFile(f)
+    } catch (e) {
+      reportError(e)
+    }
+  }, [openLocalFile, reportError])
+
   const doOpenFolder = useCallback(async () => {
     if (!supportsFSA) return toast({ kind: 'error', message: `フォルダを開けません: ${fsaUnsupportedReason()}` })
     try {
       const dir = await openDirectory()
-      if (!dir) return
-      setDirHandle(dir)
-      setSidebarOpen(true)
-      setSidebarTab('files')
-      await loadTree(dir)
+      if (dir) await openProject(handleProject(dir))
     } catch (e) {
       reportError(e)
     }
-  }, [loadTree, reportError, setSidebarOpen, setSidebarTab, toast])
+  }, [openProject, reportError, toast])
+
+  const doOpenGitHub = useCallback(() => setGhDialogOpen(true), [])
 
   const openTreeFile = useCallback(
     async (node: TreeNode) => {
@@ -410,27 +458,43 @@ export default function App() {
     [openDocument, reportError],
   )
 
+  /** 単一ファイルのプロジェクトを開き直す（タブがあればそのタブに切り替わる） */
+  const openProjectFile = useCallback(async () => {
+    const p = projectRef.current
+    if (p?.kind !== 'file') return
+    try {
+      if (!(await ensurePermission(p.handle))) return toast({ kind: 'error', message: 'アクセスが許可されませんでした' })
+      const f = await readHandle(p.handle)
+      await openDocument(f.name, f.content, f.handle)
+    } catch (e) {
+      reportError(new Error(`${p.name} を開けませんでした（移動・削除された可能性があります）`))
+      console.error(e)
+    }
+  }, [openDocument, reportError, toast])
+
+  /** 起動後に開き直したフォルダへのアクセスを再度許可してもらう */
+  const grantPermission = useCallback(async () => {
+    const p = projectRef.current
+    if (p?.kind !== 'directory') return
+    if (!(await ensurePermission(p.handle))) return toast({ kind: 'error', message: 'アクセスが許可されませんでした' })
+    setNeedsPermission(false)
+    await loadTree(p.handle)
+  }, [loadTree, toast])
+
   const openRecent = useCallback(
     async (r: RecentEntry) => {
       try {
+        if (r.kind === 'github') return await openProject(githubProject(r.owner, r.repo, r.branch))
         // 権限は起動ごとに再要求が必要
         if (!(await ensurePermission(r.handle))) return toast({ kind: 'error', message: 'アクセスが許可されませんでした' })
-        if (r.kind === 'directory') {
-          const dir = r.handle as FileSystemDirectoryHandle
-          setDirHandle(dir)
-          await loadTree(dir)
-          await addRecent(dir)
-        } else {
-          const f = await readHandle(r.handle as FileSystemFileHandle)
-          await openDocument(f.name, f.content, f.handle)
-          await addRecent(f.handle!)
-        }
+        if (r.kind === 'directory') await openProject(handleProject(r.handle))
+        else await openLocalFile(await readHandle(r.handle))
       } catch (e) {
         reportError(new Error(`${r.name} を開けませんでした（移動・削除された可能性があります）`))
         console.error(e)
       }
     },
-    [loadTree, openDocument, reportError, toast],
+    [openLocalFile, openProject, reportError, toast],
   )
 
   const openDropped = useCallback(
@@ -447,26 +511,15 @@ export default function App() {
       for (const item of items) {
         try {
           const handle = await item.handle
-          if (handle?.kind === 'directory') {
-            const dir = handle as FileSystemDirectoryHandle
-            setDirHandle(dir)
-            setSidebarOpen(true)
-            setSidebarTab('files')
-            await loadTree(dir)
-            await addRecent(dir)
-          } else if (handle?.kind === 'file') {
-            const f = await readHandle(handle as FileSystemFileHandle)
-            await openDocument(f.name, f.content, f.handle)
-            await addRecent(handle as FileSystemFileHandle)
-          } else if (item.file) {
-            await openDocument(item.file.name, await item.file.text(), null)
-          }
+          if (handle?.kind === 'directory') await openProject(handleProject(handle as FileSystemDirectoryHandle))
+          else if (handle?.kind === 'file') await openLocalFile(await readHandle(handle as FileSystemFileHandle))
+          else if (item.file) await openDocument(item.file.name, await item.file.text(), null)
         } catch (err) {
           reportError(err)
         }
       }
     },
-    [loadTree, openDocument, reportError, setSidebarOpen, setSidebarTab],
+    [openDocument, openLocalFile, openProject, reportError],
   )
 
   /* ---------------- GitHub ---------------- */
@@ -613,14 +666,40 @@ export default function App() {
       } catch (e) {
         console.error('[session] restore failed', e)
       }
+      // 前回のプロジェクトを開き直す（フォルダの権限は起動ごとにユーザー操作での再要求が必要）
+      try {
+        let saved = await getCurrentProject()
+        // GitHub タブ時代の選択（localStorage）を引き継ぐ
+        const legacyRepo = localStorage.getItem('md-editor:gh-repo')
+        if (legacyRepo) {
+          const [owner, repo] = (JSON.parse(legacyRepo) as string).split('/')
+          const branch = JSON.parse(localStorage.getItem('md-editor:gh-branch') ?? '""') as string
+          localStorage.removeItem('md-editor:gh-repo')
+          localStorage.removeItem('md-editor:gh-branch')
+          localStorage.removeItem('md-editor:sidebar-tab')
+          if (!saved && owner && repo && branch) {
+            saved = githubProject(owner, repo, branch)
+            await setCurrentProject(saved)
+            await addRecent(saved)
+          }
+        }
+        if (saved && !projectRef.current) {
+          projectRef.current = saved
+          setProjectState(saved)
+          if (saved.kind === 'directory') {
+            if ((await saved.handle.queryPermission({ mode: 'readwrite' })) === 'granted') await loadTree(saved.handle)
+            else setNeedsPermission(true)
+          }
+        }
+      } catch (e) {
+        console.error('[project] restore failed', e)
+      }
       // OS から .md ファイルを開いたとき（file_handlers）。復元の後にタブとして追加する
       window.launchQueue?.setConsumer(async (params) => {
         for (const h of params.files) {
           if (h.kind !== 'file') continue
           try {
-            const f = await readHandle(h as FileSystemFileHandle)
-            await openDocument(f.name, f.content, f.handle)
-            await addRecent(h as FileSystemFileHandle)
+            await openLocalFile(await readHandle(h as FileSystemFileHandle))
           } catch (e) {
             reportError(e)
           }
@@ -659,6 +738,7 @@ export default function App() {
       else if (mod && e.altKey && (e.key === 'ArrowRight' || e.key === 'PageDown')) cycleTab(1)
       else if (mod && e.altKey && (e.key === 'ArrowLeft' || e.key === 'PageUp')) cycleTab(-1)
       else if (mod && e.altKey && k === 'o') void doOpenFolder()
+      else if (mod && e.altKey && k === 'g') doOpenGitHub()
       else if (mod && e.altKey && k === 't') cycleTheme()
       else if (mod && e.shiftKey && k === 's') void doSaveAs()
       else if (mod && !e.shiftKey && k === 's') void doSave()
@@ -686,6 +766,7 @@ export default function App() {
     doNew,
     doOpen,
     doOpenFolder,
+    doOpenGitHub,
     doPrint,
     doSave,
     doSaveAs,
@@ -706,6 +787,21 @@ export default function App() {
     const move = (ev: PointerEvent) => setRatio(Math.min(0.85, Math.max(0.15, (ev.clientX - rect.left) / rect.width)))
     const up = () => {
       document.body.classList.remove('is-resizing')
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+
+  const sidebarRef = useRef<HTMLElement>(null)
+  const onSideSplitterDown = (e: React.PointerEvent) => {
+    e.preventDefault()
+    const rect = sidebarRef.current!.getBoundingClientRect()
+    document.body.classList.add('is-resizing-v')
+    const move = (ev: PointerEvent) => setSideSplit(Math.min(0.9, Math.max(0.1, (ev.clientY - rect.top) / rect.height)))
+    const up = () => {
+      document.body.classList.remove('is-resizing-v')
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
     }
@@ -744,6 +840,8 @@ export default function App() {
         onNew={doNew}
         onOpen={doOpen}
         onOpenFolder={doOpenFolder}
+        onOpenGitHub={doOpenGitHub}
+        onGitHubKey={() => setGhKeyDialogOpen(true)}
         onSave={doSave}
         onSaveAs={doSaveAs}
         onExportHtml={doExportHtml}
@@ -760,46 +858,55 @@ export default function App() {
 
       <div className="workspace">
         {sidebarOpen && (
-          <aside className="sidebar">
-            <div className="tabs" role="tablist">
-              <button role="tab" className={sidebarTab === 'toc' ? 'is-on' : ''} onClick={() => setSidebarTab('toc')}>
-                {marp ? 'スライド' : 'アウトライン'}
-              </button>
-              <button role="tab" className={sidebarTab === 'files' ? 'is-on' : ''} onClick={() => setSidebarTab('files')}>
-                ファイル
-              </button>
-              <button role="tab" className={sidebarTab === 'github' ? 'is-on' : ''} onClick={() => setSidebarTab('github')}>
-                GitHub
-              </button>
-            </div>
-            <div className="sidebar-body">
-              {sidebarTab === 'toc' ? (
-                <TocSidebar marp={marp} headings={headings} slides={slides} onHeading={jumpToHeading} onSlide={jumpToSlide} />
-              ) : sidebarTab === 'github' ? (
-                <GitHubPanel
-                  current={activeDoc.gh ?? null}
-                  onOpen={openGhFile}
-                  onBeforeCommit={flushGhDrafts}
-                  onCommitted={onGhCommitted}
-                  onDiscarded={onGhDiscarded}
-                  onError={reportError}
-                  onToast={(message) => toast({ kind: 'success', message })}
-                />
-              ) : (
-                <FileTree
-                  rootName={dirHandle ? nfc(dirHandle.name) : null}
-                  tree={tree}
-                  currentPath={activeDoc.path}
-                  recent={recent}
-                  supported={supportsFSA}
-                  onOpenFile={openTreeFile}
-                  onOpenFolder={doOpenFolder}
-                  onRefresh={() => dirHandle && void loadTree(dirHandle)}
-                  onOpenRecent={openRecent}
-                  onRemoveRecent={(r) => void removeRecent(r)}
-                />
-              )}
-            </div>
+          <aside className="sidebar" ref={sidebarRef}>
+            <SidebarSection
+              title="エクスプローラ"
+              open={explorerOpen}
+              grow={outlineOpen ? sideSplit : 1}
+              onToggle={() => setExplorerOpen((v) => !v)}
+            >
+              <Explorer
+                project={project}
+                needsPermission={needsPermission}
+                tree={tree}
+                currentPath={activeDoc.path}
+                currentGh={activeDoc.gh ?? null}
+                currentIsProjectFile={project?.kind === 'file' && !!activeDoc.handle && activeDoc.name === project.name}
+                recent={recent}
+                supported={supportsFSA}
+                github={{
+                  onBranch: (branch) => project?.kind === 'github' && void openProject({ ...project, branch }),
+                  onOpen: openGhFile,
+                  onBeforeCommit: flushGhDrafts,
+                  onCommitted: onGhCommitted,
+                  onDiscarded: onGhDiscarded,
+                  onRequestToken: doOpenGitHub,
+                  onError: reportError,
+                  onToast: (message) => toast({ kind: 'success', message }),
+                }}
+                onOpenTreeFile={openTreeFile}
+                onOpenProjectFile={openProjectFile}
+                onGrantPermission={grantPermission}
+                onRefresh={() => project?.kind === 'directory' && void loadTree(project.handle)}
+                onCloseProject={() => void openProject(null)}
+                onOpenFile={doOpen}
+                onOpenFolder={doOpenFolder}
+                onOpenGitHub={doOpenGitHub}
+                onOpenRecent={openRecent}
+                onRemoveRecent={(r) => void removeRecent(r)}
+              />
+            </SidebarSection>
+            {explorerOpen && outlineOpen && (
+              <div className="side-splitter" onPointerDown={onSideSplitterDown} onDoubleClick={() => setSideSplit(0.6)} title="ドラッグで高さを変更" />
+            )}
+            <SidebarSection
+              title={marp ? 'スライド' : 'アウトライン'}
+              open={outlineOpen}
+              grow={explorerOpen ? 1 - sideSplit : 1}
+              onToggle={() => setOutlineOpen((v) => !v)}
+            >
+              <TocSidebar marp={marp} headings={headings} slides={slides} onHeading={jumpToHeading} onSlide={jumpToSlide} />
+            </SidebarSection>
           </aside>
         )}
 
@@ -830,10 +937,41 @@ export default function App() {
         <PresentationMode source={previewRef.current.getRoot()!} startIndex={presenting} onClose={closePresentation} />
       )}
       {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
+      {ghKeyDialogOpen && (
+        <GitHubKeyDialog
+          onClose={() => setGhKeyDialogOpen(false)}
+          onError={reportError}
+          onToast={(message) => toast({ kind: 'success', message })}
+        />
+      )}
+      {ghDialogOpen && (
+        <GitHubOpenDialog
+          initialRepo={project?.kind === 'github' ? project.name : ''}
+          onClose={() => setGhDialogOpen(false)}
+          onError={reportError}
+          onOpen={(owner, repo, branch) => {
+            setGhDialogOpen(false)
+            void openProject(githubProject(owner, repo, branch))
+          }}
+        />
+      )}
       <Toasts items={toasts} onDismiss={dismissToast} />
       {dragOver && <div className="drop-hint">ここにドロップして開く（.md ファイル / フォルダ）</div>}
       {!supportsFSA && <FallbackNotice />}
     </div>
+  )
+}
+
+/** サイドバーの折りたたみできる区画 */
+function SidebarSection(props: { title: string; open: boolean; grow: number; onToggle(): void; children: React.ReactNode }) {
+  return (
+    <section className={`side-section${props.open ? ' is-open' : ''}`} style={props.open ? { flexGrow: props.grow } : undefined}>
+      <button className="side-head" onClick={props.onToggle} aria-expanded={props.open}>
+        <span className="tree-caret">{props.open ? '▾' : '▸'}</span>
+        {props.title}
+      </button>
+      {props.open && <div className="side-body">{props.children}</div>}
+    </section>
   )
 }
 

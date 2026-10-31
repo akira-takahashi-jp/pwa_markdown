@@ -13,6 +13,8 @@ interface Props {
   onNew(): void
   onOpen(): void
   onOpenFolder(): void
+  onOpenGitHub(): void
+  onGitHubKey(): void
   onSave(): void
   onSaveAs(): void
   onExportHtml(): void
@@ -88,6 +90,9 @@ export function Toolbar(p: Props) {
         <button onClick={p.onOpenFolder}>
           フォルダを開く…<kbd>Ctrl+Alt+O</kbd>
         </button>
+        <button onClick={p.onOpenGitHub}>
+          GitHub リポジトリを開く…<kbd>Ctrl+Alt+G</kbd>
+        </button>
         <hr />
         <button onClick={p.onSave}>
           上書き保存<kbd>Ctrl+S</kbd>
@@ -106,6 +111,9 @@ export function Toolbar(p: Props) {
         <button onClick={p.onExportMarp} disabled={!p.marp}>
           Marp スライド HTML
         </button>
+      </Menu>
+      <Menu label="設定" title="設定">
+        <button onClick={p.onGitHubKey}>GitHub の認証キー…</button>
       </Menu>
       <div className="toolbar-title" title={p.title}>
         {p.dirty && <span className="dirty-dot">●</span>}

@@ -69,8 +69,14 @@ export class GhError extends Error {
 const TOKEN_KEY = 'token'
 
 export const getToken = () => get<string>(TOKEN_KEY, store)
-export const setToken = (token: string) => set(TOKEN_KEY, token, store)
-export const clearToken = () => del(TOKEN_KEY, store)
+export async function setToken(token: string) {
+  await set(TOKEN_KEY, token, store)
+  window.dispatchEvent(new Event('gh-token-changed'))
+}
+export async function clearToken() {
+  await del(TOKEN_KEY, store)
+  window.dispatchEvent(new Event('gh-token-changed'))
+}
 
 /* ---------------- API ---------------- */
 

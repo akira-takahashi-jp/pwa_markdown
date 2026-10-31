@@ -181,34 +181,54 @@ export async function readTree(dir: FileSystemDirectoryHandle, path = '', depth 
   )
 }
 
-/* ---------------- 最近使ったファイル ---------------- */
+/* ---------------- プロジェクト ---------------- */
 
-export interface RecentEntry {
-  name: string
-  kind: 'file' | 'directory'
-  handle: FileSystemFileHandle | FileSystemDirectoryHandle
-  openedAt: number
+/** エクスプローラで開くもの。ファイル・フォルダ・GitHub のリポジトリ */
+export type Project =
+  | { kind: 'file'; name: string; handle: FileSystemFileHandle }
+  | { kind: 'directory'; name: string; handle: FileSystemDirectoryHandle }
+  | { kind: 'github'; name: string; owner: string; repo: string; branch: string }
+
+export type RecentEntry = Project & { openedAt: number }
+
+export function handleProject(handle: FileSystemFileHandle | FileSystemDirectoryHandle): Project {
+  return handle.kind === 'file'
+    ? { kind: 'file', name: nfc(handle.name), handle }
+    : { kind: 'directory', name: nfc(handle.name), handle }
+}
+
+export function githubProject(owner: string, repo: string, branch: string): Project {
+  return { kind: 'github', name: `${owner}/${repo}`, owner, repo, branch }
+}
+
+/** 同じプロジェクトか（GitHub はブランチを問わずリポジトリで比べる） */
+export async function sameProject(a: Project, b: Project): Promise<boolean> {
+  if (a.kind === 'github' || b.kind === 'github')
+    return a.kind === 'github' && b.kind === 'github' && a.owner === b.owner && a.repo === b.repo
+  if (a.kind !== b.kind) return false
+  try {
+    return await a.handle.isSameEntry(b.handle)
+  } catch {
+    // 失効したハンドル
+    return false
+  }
 }
 
 const RECENT_KEY = 'recent'
 const RECENT_MAX = 12
+const PROJECT_KEY = 'project'
 
 export async function getRecent(): Promise<RecentEntry[]> {
   return (await get<RecentEntry[]>(RECENT_KEY, store)) ?? []
 }
 
-export async function addRecent(handle: FileSystemFileHandle | FileSystemDirectoryHandle): Promise<void> {
+export async function addRecent(target: Project | FileSystemFileHandle | FileSystemDirectoryHandle): Promise<void> {
+  // FileSystemHandle は FSA 非対応ブラウザに存在しないので instanceof は使わない
+  const project = 'isSameEntry' in target ? handleProject(target as FileSystemFileHandle | FileSystemDirectoryHandle) : (target as Project)
   const list = await getRecent()
   const rest: RecentEntry[] = []
-  for (const r of list) {
-    try {
-      if (r.kind === handle.kind && (await r.handle.isSameEntry(handle))) continue
-    } catch {
-      /* 失効したハンドルは残しておく */
-    }
-    rest.push(r)
-  }
-  const next = [{ name: nfc(handle.name), kind: handle.kind, handle, openedAt: Date.now() }, ...rest].slice(0, RECENT_MAX)
+  for (const r of list) if (!(await sameProject(r, project))) rest.push(r)
+  const next = [{ ...project, openedAt: Date.now() }, ...rest].slice(0, RECENT_MAX)
   await set(RECENT_KEY, next, store)
   window.dispatchEvent(new Event('recent-changed'))
 }
@@ -223,6 +243,10 @@ export async function clearRecent(): Promise<void> {
   await set(RECENT_KEY, [], store)
   window.dispatchEvent(new Event('recent-changed'))
 }
+
+/** 現在のプロジェクト（次回起動時に開き直す） */
+export const getCurrentProject = () => get<Project>(PROJECT_KEY, store)
+export const setCurrentProject = (p: Project | null) => (p ? set(PROJECT_KEY, p, store) : del(PROJECT_KEY, store))
 
 /* ---------------- 自動保存（クラッシュ復元用） ---------------- */
 

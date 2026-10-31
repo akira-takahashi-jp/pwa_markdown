@@ -56,17 +56,18 @@ BASE_PATH=/pwa_markdown/ npm run preview   # http://localhost:4173/pwa_markdown/
 | プレビュー | GFM（表・タスクリスト・取り消し線・自動リンク）、脚注、KaTeX、Shiki、アウトライン（サイドバー）、DOMPurify によるサニタイズ |
 | Mermaid | ```` ```mermaid ```` を SVG に描画。構文エラーは図の位置にメッセージ表示。ライト/ダーク連動。コードのハッシュでキャッシュし、画面に近づいたときに遅延描画 |
 | Marp | front-matter の `marp: true` でスライドモード。default / gaia / uncover テーマ、`<style>` のカスタム CSS、スライド内 mermaid、プレゼンテーション（F5、矢印キー、Esc） |
-| ファイル | 開く（複数選択可）/上書き保存/名前を付けて保存、フォルダツリー、最近使ったファイル（権限は再要求）、ドラッグ＆ドロップ（複数可）、全タブの IndexedDB への自動退避と次回起動時の復元、未保存時の ● 表示と離脱確認、非対応ブラウザ向けフォールバック |
-| GitHub | 認証キー（Fine-grained token）を登録してリポジトリ・ブランチを選ぶと、.md のツリーをサイドバーに表示。編集して保存（Ctrl+S）すると下書きとしてローカルに一時保存し、次回も続きから編集可能。下書きはまとめて 1 つのコミットにできる（新規ファイルにも対応） |
+| ファイル | 開く（複数選択可）/上書き保存/名前を付けて保存、ドラッグ＆ドロップ（複数可）、全タブの IndexedDB への自動退避と次回起動時の復元、未保存時の ● 表示と離脱確認、非対応ブラウザ向けフォールバック |
+| サイドバー | 上がエクスプローラ、下がアウトライン（見出し / スライド一覧）。それぞれ折りたため、境目のドラッグで高さを変えられる。エクスプローラには現在のプロジェクトと最近のプロジェクトを表示。プロジェクトはファイル・フォルダ・GitHub リポジトリのいずれかで、次回起動時も開き直す（フォルダは権限を再要求） |
+| GitHub | 「ファイル → GitHub リポジトリを開く」で認証キー（Fine-grained token）を登録し、リポジトリ・ブランチを選ぶと .md のツリーをエクスプローラに表示。編集して保存（Ctrl+S）すると下書きとしてローカルに一時保存し、次回も続きから編集可能。下書きはまとめて 1 つのコミットにできる（新規ファイルにも対応） |
 | エクスポート | 単一 HTML（スタイル・KaTeX フォント・mermaid SVG を埋め込み）、PDF（印刷、Marp は 1 スライド 1 ページ）、Marp スライド HTML |
 | PWA | 全チャンク（mermaid / Marp / KaTeX フォント / Shiki 言語）のプリキャッシュ、インストール、`file_handlers`（OS から .md を開く）、「更新があります」トースト |
 
 ### GitHub 連携の使い方
 
 1. GitHub の [Fine-grained token の発行画面](https://github.com/settings/personal-access-tokens/new) で、Repository access に対象のリポジトリを選び、Permissions の **Contents** を **Read and write** にして発行します。
-2. サイドバーの「GitHub」タブにキーを貼り付けて接続します。キーはブラウザの IndexedDB にだけ保存され、GitHub の API 以外には送信しません（「⏏」で削除できます）。
-3. リポジトリ（`owner/repo`）とブランチを選ぶと、.md ファイルのツリーが表示されます。
-4. 開いたファイルを編集して保存すると、下書き（未コミットの変更）として一時保存されます。ツリーでは ● が付き、閉じても次に開いたときは下書きの内容で開きます。
+2. メニューの「ファイル → GitHub リポジトリを開く」（Ctrl+Alt+G）でキーを貼り付けて接続します。キーはブラウザの IndexedDB にだけ保存され、GitHub の API 以外には送信しませんキーの確認・変更・削除はメニューの「設定 → GitHub の認証キー」からできます。
+3. リポジトリ（`owner/repo`）とブランチを選んで開くと、エクスプローラに .md ファイルのツリーが表示されます。ブランチはツリーの上で切り替えられます。
+4. 開いたファイルを編集して保存すると、下書き（未コミットの変更）として一時保存されます。ツリーでは ● が付き、閉じても次に開いたときは下書きの内容で開きます。下書きのあるリポジトリは、最近のプロジェクトにも件数が表示されます。
 5. 「コミット」で下書きを選んで 1 つのコミットにまとめ、ブランチに積みます。編集を始めた後に同じファイルがリモートで変更されていた場合はコミットせずに知らせます（他のファイルの変更は問題ありません）。
 
 ショートカット一覧はアプリ内の **?** ボタン（または F1）から確認できます。
@@ -87,14 +88,14 @@ BASE_PATH=/pwa_markdown/ npm run preview   # http://localhost:4173/pwa_markdown/
 
 ```
 src/
-  components/  Editor, Preview, SlidePreview, PresentationMode, Toolbar, FileTree, GitHubPanel, TocSidebar, HelpDialog, Toast
+  components/  Editor, Preview, SlidePreview, PresentationMode, Toolbar, Explorer, GitHub, TocSidebar, HelpDialog, Toast
   lib/
     markdown.ts   markdown-it の設定（ブロック単位で描画）
     blocks.ts     プレビューのブロック単位の差分更新
     highlight.ts  Shiki（言語を遅延読み込み）
     mermaid.ts    描画・キャッシュ・遅延描画
     marp.ts       marp-core の設定と mermaid 連携
-    fs.ts         File System Access API と IndexedDB
+    fs.ts         File System Access API、プロジェクト・最近のプロジェクト、IndexedDB
     github.ts     GitHub REST API（ツリー・blob・コミット）と下書きの保存
     export.ts     HTML / PDF 書き出し
     sanitize.ts   DOMPurify の設定

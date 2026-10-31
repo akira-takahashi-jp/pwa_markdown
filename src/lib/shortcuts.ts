@@ -2,6 +2,7 @@ export const SHORTCUTS: { keys: string; label: string; group: string }[] = [
   { group: 'ファイル', keys: 'Ctrl+Alt+N', label: '新規作成' },
   { group: 'ファイル', keys: 'Ctrl+O', label: 'ファイルを開く（複数選択可）' },
   { group: 'ファイル', keys: 'Ctrl+Alt+O', label: 'フォルダを開く' },
+  { group: 'ファイル', keys: 'Ctrl+Alt+G', label: 'GitHub リポジトリを開く' },
   { group: 'ファイル', keys: 'Ctrl+S', label: '上書き保存' },
   { group: 'ファイル', keys: 'Ctrl+Shift+S', label: '名前を付けて保存' },
   { group: 'ファイル', keys: 'Ctrl+P', label: '印刷 / PDF 出力' },
