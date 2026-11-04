@@ -44,6 +44,7 @@ import {
 } from './lib/fs'
 import { fetchBytesByPath, fetchFileByPath, getDraft, getToken, ghKey, saveDraft, type CommitResult, type GhDraft, type GhRef } from './lib/github'
 import { debounce } from './lib/hash'
+import { scrollToFragment } from './lib/links'
 import type { Heading } from './lib/markdown'
 import { slideStartLines } from './lib/marp'
 import { setMermaidTheme } from './lib/mermaid'
@@ -580,10 +581,8 @@ export default function App() {
 
   const jumpToAnchor = useCallback((id: string) => {
     const root = previewRef.current?.getRoot()
-    if (!root?.querySelector(`[id="${CSS.escape(id)}"]`)) return false
     activePaneRef.current = null
-    previewRef.current?.jumpTo(id)
-    return true
+    return !!root && scrollToFragment(root, id)
   }, [])
 
   /** プレビューの相対リンク（例: 記事/a.md#見出し）を、現在の文書の場所から解決してタブで開く */
@@ -600,7 +599,7 @@ export default function App() {
           return v
         }
       }
-      const anchor = hashAt < 0 ? null : decode(href.slice(hashAt + 1))
+      const anchor = hashAt < 0 ? null : href.slice(hashAt + 1)
       const target = decode(rawPath.replace(/\?.*$/, ''))
       const fail = (message: string) => toast({ kind: 'error', message })
       if (!MD_EXT.test(target)) return fail(`Markdown 以外のファイルはリンクから開けません: ${target}`)
@@ -1097,7 +1096,13 @@ export default function App() {
           <div className="splitter" onPointerDown={onSplitterDown} onDoubleClick={() => setRatio(0.5)} title="ドラッグで幅を変更（ダブルクリックで等分）" />
           <section className="pane pane-preview">
             {marp ? (
-              <SlidePreview ref={previewRef} {...previewProps} onSlides={setSlides} onPresent={startPresentation} />
+              <SlidePreview
+                ref={previewRef}
+                {...previewProps}
+                onSlides={setSlides}
+                onPresent={startPresentation}
+                onOpenLink={(href) => void openLink(href)}
+              />
             ) : (
               <Preview
                 ref={previewRef}

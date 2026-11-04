@@ -4,6 +4,7 @@ import { renderMarkdown, type Heading } from '../lib/markdown'
 import { hydrateMermaid, type Hydration } from '../lib/mermaid'
 import { DiagramTools, MermaidViewer, useInlineDiagramZoom, zoomableDiagram } from './MermaidZoom'
 import { isRelativeUrl } from '../lib/fs'
+import { handlePreviewLinkClick } from '../lib/links'
 import { collectAnchors, lineToTop, topToLine, type Anchor, type PreviewHandle } from '../lib/scrollSync'
 
 interface Props {
@@ -131,19 +132,7 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(props, 
     [],
   )
 
-  const onClick = (e: React.MouseEvent) => {
-    const a = (e.target as HTMLElement).closest('a')
-    const href = a?.getAttribute('href')
-    if (a && href?.startsWith('#')) {
-      e.preventDefault()
-      const id = decodeURIComponent(href.slice(1))
-      contentRef.current!.querySelector(`[id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'start' })
-    } else if (a && href && isRelativeUrl(href)) {
-      // 相対リンクはアプリ自体の URL への遷移になってしまうので、エディタ内で開く
-      e.preventDefault()
-      propsRef.current.onOpenLink?.(href)
-    }
-  }
+  const onClick = (e: React.MouseEvent) => handlePreviewLinkClick(e, contentRef.current!, propsRef.current.onOpenLink)
 
   const interact = () => propsRef.current.onUserInteract()
 

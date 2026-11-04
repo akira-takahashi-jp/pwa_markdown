@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { loadMarpBrowser, renderMarp, slideStartLines } from '../lib/marp'
 import { renderAllMermaid } from '../lib/mermaid'
+import { handlePreviewLinkClick } from '../lib/links'
 import type { PreviewHandle } from '../lib/scrollSync'
 
 export interface SlideInfo {
@@ -15,6 +16,8 @@ interface Props {
   onScroll(): void
   onUserInteract(): void
   onPresent(index: number): void
+  /** スライド内の相対リンク（別の .md など）がクリックされた */
+  onOpenLink?(href: string): void
 }
 
 export const SlidePreview = forwardRef<PreviewHandle, Props>(function SlidePreview(props, ref) {
@@ -134,7 +137,11 @@ export const SlidePreview = forwardRef<PreviewHandle, Props>(function SlidePrevi
     >
       <style>{css}</style>
       {error && <div className="slides-error">Marp の描画に失敗しました: {error}</div>}
-      <div className="slides" ref={contentRef} onDoubleClick={onDoubleClick} title="ダブルクリックでこのスライドから発表" />
+      <div
+        className="slides"
+        ref={contentRef}
+        onClick={(e) => handlePreviewLinkClick(e, contentRef.current!, propsRef.current.onOpenLink)}
+        onDoubleClick={onDoubleClick} title="ダブルクリックでこのスライドから発表" />
     </div>
   )
 })
