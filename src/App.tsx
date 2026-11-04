@@ -20,11 +20,14 @@ import {
   getRecent,
   githubProject,
   handleProject,
+  MD_EXT,
   nfc,
   openDirectory,
+  getFileByPath,
   openFiles,
   readHandle,
   readTree,
+  resolveRelativePath,
   removeRecent,
   saveFileAs,
   fsaUnsupportedReason,
@@ -38,7 +41,7 @@ import {
   type RecentEntry,
   type TreeNode,
 } from './lib/fs'
-import { ghKey, saveDraft, type CommitResult, type GhDraft, type GhRef } from './lib/github'
+import { fetchFileByPath, getDraft, getToken, ghKey, saveDraft, type CommitResult, type GhDraft, type GhRef } from './lib/github'
 import { debounce } from './lib/hash'
 import type { Heading } from './lib/markdown'
 import { slideStartLines } from './lib/marp'
@@ -529,6 +532,81 @@ export default function App() {
     [openDocument],
   )
 
+  /* ---------------- 文書内リンク ---------------- */
+
+  /** リンク先を開いたあと、描画が済んだらジャンプする見出し */
+  const pendingAnchorRef = useRef<{ docId: string; anchor: string } | null>(null)
+
+  const jumpToAnchor = useCallback((id: string) => {
+    const root = previewRef.current?.getRoot()
+    if (!root?.querySelector(`[id="${CSS.escape(id)}"]`)) return false
+    activePaneRef.current = null
+    previewRef.current?.jumpTo(id)
+    return true
+  }, [])
+
+  /** プレビューの相対リンク（例: 記事/a.md#見出し）を、現在の文書の場所から解決してタブで開く */
+  const openLink = useCallback(
+    async (href: string) => {
+      const doc = docsRef.current.find((d) => d.id === activeIdRef.current)
+      if (!doc) return
+      const hashAt = href.indexOf('#')
+      const rawPath = hashAt < 0 ? href : href.slice(0, hashAt)
+      const decode = (v: string) => {
+        try {
+          return decodeURIComponent(v)
+        } catch {
+          return v
+        }
+      }
+      const anchor = hashAt < 0 ? null : decode(href.slice(hashAt + 1))
+      const target = decode(rawPath.replace(/\?.*$/, ''))
+      const fail = (message: string) => toast({ kind: 'error', message })
+      if (!MD_EXT.test(target)) return fail(`Markdown 以外のファイルはリンクから開けません: ${target}`)
+      const base = doc.gh?.path ?? doc.path
+      if (base == null) {
+        return fail(doc.handle ? 'リンク先を開くには、ファイルのあるフォルダを開いてください' : 'この文書からは相対リンクをたどれません（保存先のフォルダがありません）')
+      }
+      const path = resolveRelativePath(base, target)
+      if (!path) return fail(`リンク先がプロジェクトの外にあります: ${target}`)
+      try {
+        if (doc.gh) {
+          const at = { owner: doc.gh.owner, repo: doc.gh.repo, branch: doc.gh.branch, path }
+          const name = nfc(path.slice(path.lastIndexOf('/') + 1))
+          const same = docsRef.current.find((d) => d.gh && ghKey(d.gh) === ghKey(at))
+          if (same) activate(same.id)
+          else {
+            const draft = await getDraft(at)
+            if (draft) await openDocument(name, draft.content, null, { gh: { ...at, sha: draft.baseSha } })
+            else {
+              const token = await getToken()
+              if (!token) return fail('GitHub の認証キーが設定されていません')
+              const f = await fetchFileByPath(token, at.owner, at.repo, at.branch, path)
+              if (!f) return fail(`リンク先のファイルが見つかりません: ${path}`)
+              await openDocument(name, f.content, null, { gh: { ...at, sha: f.sha } })
+            }
+          }
+        } else {
+          const p = projectRef.current
+          if (p?.kind !== 'directory') return fail('リンク先を開くには、ファイルのあるフォルダを開いてください')
+          if (!(await ensurePermission(p.handle))) return fail('アクセスが許可されませんでした')
+          const handle = await getFileByPath(p.handle, path)
+          if (!handle) return fail(`リンク先のファイルが見つかりません: ${path}`)
+          const f = await readHandle(handle)
+          await openDocument(f.name, f.content, f.handle, { path: path.split('/').map(nfc).join('/') })
+        }
+      } catch (e) {
+        return reportError(e)
+      }
+      if (anchor) {
+        // 同じ文書へのリンクなら描画済みなのですぐ飛ぶ。別の文書は描画後に飛ぶ
+        if (activeIdRef.current === doc.id) jumpToAnchor(anchor)
+        else pendingAnchorRef.current = { docId: activeIdRef.current, anchor }
+      }
+    },
+    [activate, jumpToAnchor, openDocument, reportError, toast],
+  )
+
   const flushGhDrafts = useCallback(async () => {
     for (const d of docsRef.current) if (d.gh && d.dirty) await saveGhDraft(d.id, d.gh)
   }, [saveGhDraft])
@@ -618,9 +696,14 @@ export default function App() {
   )
 
   const onPreviewRendered = useCallback(() => {
+    const pending = pendingAnchorRef.current
+    if (pending?.docId === activeIdRef.current) {
+      pendingAnchorRef.current = null
+      if (jumpToAnchor(pending.anchor)) return
+    }
     // 再描画後もエディターの位置に合わせ直す
     if (activePaneRef.current === 'editor') syncFrom('editor')
-  }, [syncFrom])
+  }, [jumpToAnchor, syncFrom])
 
   const jumpToHeading = useCallback((h: Heading) => {
     activePaneRef.current = null
@@ -927,7 +1010,13 @@ export default function App() {
             {marp ? (
               <SlidePreview ref={previewRef} {...previewProps} onSlides={setSlides} onPresent={startPresentation} />
             ) : (
-              <Preview ref={previewRef} {...previewProps} onHeadings={setHeadings} onRendered={onPreviewRendered} />
+              <Preview
+                ref={previewRef}
+                {...previewProps}
+                onHeadings={setHeadings}
+                onRendered={onPreviewRendered}
+                onOpenLink={(href) => void openLink(href)}
+              />
             )}
           </section>
         </main>

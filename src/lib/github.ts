@@ -192,6 +192,23 @@ export async function fetchBlob(token: string, owner: string, repo: string, sha:
   return b.encoding === 'base64' ? decodeBase64Utf8(b.content) : b.content
 }
 
+/** パスでファイルを取得する（見つからなければ null） */
+export async function fetchFileByPath(token: string, owner: string, repo: string, branch: string, path: string) {
+  try {
+    const f = await request<{ type: string; sha: string; content?: string; encoding?: string }>(
+      token,
+      `${repoPath(owner, repo)}/contents/${path.split('/').map(enc).join('/')}?ref=${enc(branch)}`,
+    )
+    if (f.type !== 'file') return null
+    // 1MB を超えるファイルは content が空なので blob から取る
+    const content = f.encoding === 'base64' && f.content ? decodeBase64Utf8(f.content) : await fetchBlob(token, owner, repo, f.sha)
+    return { sha: f.sha, content }
+  } catch (e) {
+    if (e instanceof GhError && e.status === 404) return null
+    throw e
+  }
+}
+
 /** git と同じ方法で blob の SHA-1 を計算する（内容が元と同じかの判定用） */
 export async function gitBlobSha(content: string): Promise<string> {
   const body = new TextEncoder().encode(content)

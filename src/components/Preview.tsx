@@ -13,6 +13,8 @@ interface Props {
   onScroll(): void
   onUserInteract(): void
   onRendered?(): void
+  /** 文書内の相対リンク（別の .md など）がクリックされた */
+  onOpenLink?(href: string): void
 }
 
 export const Preview = forwardRef<PreviewHandle, Props>(function Preview(props, ref) {
@@ -104,6 +106,10 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(props, 
       e.preventDefault()
       const id = decodeURIComponent(href.slice(1))
       contentRef.current!.querySelector(`[id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'start' })
+    } else if (a && href && !/^[a-z][a-z\d+.-]*:|^\/\//i.test(href)) {
+      // 相対リンクはアプリ自体の URL への遷移になってしまうので、エディタ内で開く
+      e.preventDefault()
+      propsRef.current.onOpenLink?.(href)
     }
   }
 

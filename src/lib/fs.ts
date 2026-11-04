@@ -181,6 +181,47 @@ export async function readTree(dir: FileSystemDirectoryHandle, path = '', depth 
   )
 }
 
+/** フォルダ内のファイルをパス（"a/b.md"）で取り出す。名前は NFC で比べる（macOS の NFD 名に対応） */
+export async function getFileByPath(root: FileSystemDirectoryHandle, path: string): Promise<FileSystemFileHandle | null> {
+  const parts = path.split('/').filter(Boolean)
+  let dir = root
+  for (let i = 0; i < parts.length; i++) {
+    const last = i === parts.length - 1
+    const kind = last ? 'file' : 'directory'
+    let found: FileSystemHandle | null = null
+    try {
+      found = last ? await dir.getFileHandle(parts[i]) : await dir.getDirectoryHandle(parts[i])
+    } catch {
+      for await (const entry of dir.values()) {
+        if (entry.kind === kind && nfc(entry.name) === nfc(parts[i])) {
+          found = entry
+          break
+        }
+      }
+    }
+    if (!found) return null
+    if (last) return found as FileSystemFileHandle
+    dir = found as FileSystemDirectoryHandle
+  }
+  return null
+}
+
+/**
+ * 文書内の相対リンクを、プロジェクトのルートからのパスに解決する。
+ * ルートより上を指す場合は null
+ */
+export function resolveRelativePath(fromPath: string, href: string): string | null {
+  const base = href.startsWith('/') ? [] : fromPath.split('/').slice(0, -1)
+  for (const part of href.split('/')) {
+    if (part === '' || part === '.') continue
+    if (part === '..') {
+      if (!base.length) return null
+      base.pop()
+    } else base.push(part)
+  }
+  return base.join('/')
+}
+
 /* ---------------- プロジェクト ---------------- */
 
 /** エクスプローラで開くもの。ファイル・フォルダ・GitHub のリポジトリ */
