@@ -150,11 +150,18 @@ export default function App() {
 
   /* ---------------- PWA 更新通知 ---------------- */
 
+  const swRegRef = useRef<ServiceWorkerRegistration | null>(null)
+
   const {
     needRefresh: [needRefresh],
     offlineReady: [offlineReady, setOfflineReady],
     updateServiceWorker,
-  } = useRegisterSW({ immediate: true })
+  } = useRegisterSW({
+    immediate: true,
+    onRegisteredSW: (_url, r) => {
+      swRegRef.current = r ?? null
+    },
+  })
 
   useEffect(() => {
     if (needRefresh)
@@ -162,6 +169,37 @@ export default function App() {
         message: '更新があります',
         sticky: true,
         action: { label: '再読み込み', onClick: () => void updateServiceWorker(true) },
+      })
+  }, [needRefresh, toast, updateServiceWorker])
+
+  /** 設定メニューから手動で更新を確認し、新しい版があれば読み込み直す */
+  const checkForUpdate = useCallback(async () => {
+    if (needRefresh) return void updateServiceWorker(true)
+    const r = swRegRef.current
+    if (!r) return toast({ kind: 'error', message: '更新を確認できません（Service Worker が登録されていません）' })
+    try {
+      await r.update()
+    } catch {
+      return toast({ kind: 'error', message: '更新を確認できませんでした（オフラインの可能性があります）' })
+    }
+    const sw = r.installing ?? r.waiting
+    if (!sw) return toast({ kind: 'success', message: '最新の版です' })
+    toast({ message: '新しい版を読み込んでいます…' })
+    // インストールが済んだら待機中の Service Worker を有効にして読み込み直す
+    const activate = () => {
+      navigator.serviceWorker.addEventListener('controllerchange', () => window.location.reload(), { once: true })
+      ;(r.waiting ?? sw).postMessage({ type: 'SKIP_WAITING' })
+    }
+    if (sw.state === 'installed') activate()
+    else
+      sw.addEventListener('statechange', function onState() {
+        if (sw.state === 'installed') {
+          sw.removeEventListener('statechange', onState)
+          activate()
+        } else if (sw.state === 'redundant') {
+          sw.removeEventListener('statechange', onState)
+          toast({ kind: 'error', message: '更新の読み込みに失敗しました' })
+        }
       })
   }, [needRefresh, toast, updateServiceWorker])
 
@@ -974,6 +1012,7 @@ export default function App() {
         onOpenFolder={doOpenFolder}
         onOpenGitHub={doOpenGitHub}
         onGitHubKey={() => setGhKeyDialogOpen(true)}
+        onCheckUpdate={() => void checkForUpdate()}
         onSave={doSave}
         onSaveAs={doSaveAs}
         onExportHtml={doExportHtml}

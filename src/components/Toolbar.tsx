@@ -15,6 +15,7 @@ interface Props {
   onOpenFolder(): void
   onOpenGitHub(): void
   onGitHubKey(): void
+  onCheckUpdate(): void
   onSave(): void
   onSaveAs(): void
   onExportHtml(): void
@@ -114,6 +115,7 @@ export function Toolbar(p: Props) {
       </Menu>
       <Menu label="設定" title="設定">
         <button onClick={p.onGitHubKey}>GitHub の認証キー…</button>
+        <button onClick={p.onCheckUpdate}>アップデートを確認</button>
       </Menu>
       <div className="toolbar-title" title={p.title}>
         {p.dirty && <span className="dirty-dot">●</span>}
