@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fsaUnsupportedReason, nfc, sameProject, type Project, type RecentEntry, type TreeNode } from '../lib/fs'
+import { fsaUnsupportedReason, isAncestor, nfc, sameProject, type Project, type RecentEntry, type TreeNode } from '../lib/fs'
 import type { GhRef } from '../lib/github'
 import { GitHubProject, useGhDrafts } from './GitHub'
 
@@ -35,7 +35,11 @@ const KIND_LABEL: Record<Project['kind'], string> = { file: 'ファイル', dire
 function Node({ node, currentPath, onOpenFile }: { node: TreeNode; currentPath: string | null; onOpenFile(n: TreeNode): void }) {
   // .md を含まないフォルダは閉じた状態で薄く表示する
   const hasMd = node.kind === 'directory' && (node.mdCount ?? 0) > 0
-  const [open, setOpen] = useState(hasMd)
+  // フォルダは閉じた状態で表示し、開いている文書を含むフォルダだけ開く
+  const [open, setOpen] = useState(() => isAncestor(node.path, currentPath))
+  useEffect(() => {
+    if (isAncestor(node.path, currentPath)) setOpen(true)
+  }, [node.path, currentPath])
   if (node.kind === 'directory') {
     const empty = !node.children?.length
     return (

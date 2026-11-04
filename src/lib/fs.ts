@@ -181,6 +181,9 @@ export async function readTree(dir: FileSystemDirectoryHandle, path = '', depth 
   )
 }
 
+/** dir（フォルダのパス）が path の祖先か */
+export const isAncestor = (dir: string, path: string | null) => !!path && path.startsWith(`${dir}/`)
+
 /** フォルダ内のファイルをパス（"a/b.md"）で取り出す。名前は NFC で比べる（macOS の NFD 名に対応） */
 export async function getFileByPath(root: FileSystemDirectoryHandle, path: string): Promise<FileSystemFileHandle | null> {
   const parts = path.split('/').filter(Boolean)

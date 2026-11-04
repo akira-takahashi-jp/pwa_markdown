@@ -24,7 +24,7 @@ import {
   type GhTreeNode,
   type GhUser,
 } from '../lib/github'
-import { nfc } from '../lib/fs'
+import { isAncestor, nfc } from '../lib/fs'
 
 const TOKEN_URL = 'https://github.com/settings/personal-access-tokens/new'
 
@@ -409,7 +409,11 @@ function findNode(nodes: GhTreeNode[], path: string): GhTreeNode | null {
 
 function GhNode(p: { node: GhTreeNode; currentPath: string | null; draftPaths: Set<string>; onOpen(path: string, sha: string | null): void }) {
   const { node } = p
-  const [open, setOpen] = useState(() => node.path.split('/').length < 2)
+  // フォルダは閉じた状態で表示し、開いている文書を含むフォルダだけ開く
+  const [open, setOpen] = useState(() => isAncestor(node.path, p.currentPath))
+  useEffect(() => {
+    if (isAncestor(node.path, p.currentPath)) setOpen(true)
+  }, [node.path, p.currentPath])
   if (node.kind === 'directory') {
     return (
       <li>
