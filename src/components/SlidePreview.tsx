@@ -16,6 +16,7 @@ interface Props {
   onScroll(): void
   onUserInteract(): void
   onPresent(index: number): void
+  onRendered?(): void
   /** スライド内の相対リンク（別の .md など）がクリックされた */
   onOpenLink?(href: string): void
 }
@@ -54,6 +55,7 @@ export const SlidePreview = forwardRef<PreviewHandle, Props>(function SlidePrevi
             title: s.querySelector('h1,h2,h3,h4,h5,h6')?.textContent?.trim() || `スライド ${i + 1}`,
           })),
         )
+        propsRef.current.onRendered?.()
       } catch (e) {
         console.error('[marp] render failed', e)
         if (seq === seqRef.current) setError(e instanceof Error ? e.message : String(e))
@@ -107,6 +109,12 @@ export const SlidePreview = forwardRef<PreviewHandle, Props>(function SlidePrevi
       isAtBottom() {
         const s = scrollerRef.current!
         return s.scrollTop + s.clientHeight >= s.scrollHeight - 4
+      },
+      getScrollTop() {
+        return scrollerRef.current!.scrollTop
+      },
+      setScrollTop(top) {
+        scrollerRef.current!.scrollTop = top
       },
       jumpTo(target) {
         if (typeof target === 'number') slideEls()[target]?.scrollIntoView({ block: 'start' })

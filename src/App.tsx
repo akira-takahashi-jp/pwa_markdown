@@ -215,6 +215,10 @@ export default function App() {
 
   /** スクロール同期の元になるペイン（ユーザーが最後に操作した側） */
   const activePaneRef = useRef<'editor' | 'preview' | null>(null)
+  /** タブごとのプレビューのスクロール位置 */
+  const previewScrollRef = useRef(new Map<string, number>())
+  /** タブを切り替えたあと、描画が済んだら戻すプレビューの位置 */
+  const pendingScrollRef = useRef<{ docId: string; top: number } | null>(null)
 
   const setDocs = useCallback((next: DocMeta[]) => {
     docsRef.current = next
@@ -255,13 +259,24 @@ export default function App() {
   const activate = useCallback(
     (id: string) => {
       const text = contentsRef.current.get(id) ?? ''
+      const prev = activeIdRef.current
+      // 切り替える前のタブのプレビューの位置を覚えておく
+      if (prev !== id && previewRef.current) previewScrollRef.current.set(prev, previewRef.current.getScrollTop())
       editorRef.current?.open(id, text)
       activeIdRef.current = id
       setActiveIdState(id)
       updatePreview.cancel()
       setPreviewSrc(text)
-      // 描画後にプレビューをエディターのスクロール位置へ合わせる
-      activePaneRef.current = 'editor'
+      const top = prev !== id ? previewScrollRef.current.get(id) : undefined
+      if (top !== undefined) {
+        // 前に表示していたタブなら、描画後にプレビューを前の位置に戻す（エディターとはそれぞれの位置のまま）
+        pendingScrollRef.current = { docId: id, top }
+        activePaneRef.current = null
+      } else {
+        // 初めて表示するタブは、描画後にプレビューをエディターのスクロール位置へ合わせる
+        pendingScrollRef.current = null
+        activePaneRef.current = 'editor'
+      }
       autosave()
     },
     [autosave, updatePreview],
@@ -320,6 +335,7 @@ export default function App() {
       const doc = docsRef.current.find((d) => d.id === id)
       if (!doc) return
       if (doc.dirty && !force && !window.confirm(`「${doc.name}」の変更を保存せずに閉じますか？`)) return
+      previewScrollRef.current.delete(id)
       const index = docsRef.current.indexOf(doc)
       let rest = docsRef.current.filter((d) => d.id !== id)
       if (rest.length === 0) {
@@ -787,6 +803,11 @@ export default function App() {
       pendingAnchorRef.current = null
       if (jumpToAnchor(pending.anchor)) return
     }
+    const restore = pendingScrollRef.current
+    if (restore) {
+      pendingScrollRef.current = null
+      if (restore.docId === activeIdRef.current) return previewRef.current?.setScrollTop(restore.top)
+    }
     // 再描画後もエディターの位置に合わせ直す
     if (activePaneRef.current === 'editor') syncFrom('editor')
   }, [jumpToAnchor, syncFrom])
@@ -1101,6 +1122,7 @@ export default function App() {
                 {...previewProps}
                 onSlides={setSlides}
                 onPresent={startPresentation}
+                onRendered={onPreviewRendered}
                 onOpenLink={(href) => void openLink(href)}
               />
             ) : (

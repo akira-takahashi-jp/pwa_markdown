@@ -121,6 +121,12 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(props, 
         const s = scrollerRef.current!
         return s.scrollTop + s.clientHeight >= s.scrollHeight - 4
       },
+      getScrollTop() {
+        return scrollerRef.current!.scrollTop
+      },
+      setScrollTop(top) {
+        scrollerRef.current!.scrollTop = top
+      },
       jumpTo(target) {
         const el = typeof target === 'string' ? contentRef.current!.querySelector(`[id="${CSS.escape(target)}"]`) : null
         el?.scrollIntoView({ block: 'start' })

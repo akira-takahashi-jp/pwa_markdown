@@ -2,6 +2,9 @@ export interface PreviewHandle {
   getTopLine(): number
   scrollToLine(line: number, atBottom?: boolean): void
   isAtBottom(): boolean
+  /** タブを切り替えたときにスクロール位置を覚えておき、戻ったときに元に戻す */
+  getScrollTop(): number
+  setScrollTop(top: number): void
   /** 見出し・スライドへジャンプ */
   jumpTo(target: string | number): void
   /** 印刷・エクスポート対象のルート要素 */
