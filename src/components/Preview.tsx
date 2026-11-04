@@ -3,6 +3,7 @@ import { patchBlocks } from '../lib/blocks'
 import { renderMarkdown, type Heading } from '../lib/markdown'
 import { hydrateMermaid, type Hydration } from '../lib/mermaid'
 import { DiagramTools, MermaidViewer, useInlineDiagramZoom, zoomableDiagram } from './MermaidZoom'
+import { isRelativeUrl } from '../lib/fs'
 import { collectAnchors, lineToTop, topToLine, type Anchor, type PreviewHandle } from '../lib/scrollSync'
 
 interface Props {
@@ -15,6 +16,29 @@ interface Props {
   onRendered?(): void
   /** 文書内の相対リンク（別の .md など）がクリックされた */
   onOpenLink?(href: string): void
+  /** 相対パスの画像を読み込んで表示用の URL にする（読めなければ null） */
+  resolveImage?(src: string): Promise<string | null>
+  /** 相対パスの基準（文書の場所）。変わったら画像を読み直す */
+  assetBase?: string
+}
+
+/**
+ * 相対パスの画像を、開いているフォルダや GitHub から読み込んだものに差し替える。
+ * 差し替えた画像は元のパスと基準を data 属性に残し、基準が変わったときだけ読み直す
+ */
+function resolveImages(root: HTMLElement, base: string, resolve: (src: string) => Promise<string | null>) {
+  for (const img of root.querySelectorAll<HTMLImageElement>('img')) {
+    const src = img.dataset.src ?? img.getAttribute('src') ?? ''
+    if (!isRelativeUrl(src) || img.dataset.base === base) continue
+    img.dataset.src = src
+    img.dataset.base = base
+    img.removeAttribute('src')
+    void resolve(src)
+      .then((url) => {
+        if (url && img.dataset.base === base) img.src = url
+      })
+      .catch((e) => console.error('[preview] image load failed', src, e))
+  }
 }
 
 export const Preview = forwardRef<PreviewHandle, Props>(function Preview(props, ref) {
@@ -51,6 +75,8 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(props, 
           themeRef.current = props.themeKey
         }
         patchBlocks(content, r.blocks)
+        const { resolveImage, assetBase } = propsRef.current
+        if (resolveImage) resolveImages(content, assetBase ?? '', resolveImage)
         anchorsRef.current = null
         // mermaid はキャッシュ済みなら即時、それ以外は画面に近づいたときに描画する
         hydrationRef.current = hydrateMermaid(content, { lazy: true, scrollRoot: scrollerRef.current })
@@ -64,6 +90,12 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(props, 
   }, [props.src, props.themeKey])
 
   useEffect(() => () => hydrationRef.current?.disconnect(), [])
+
+  // 文書の場所だけが変わった（同じ内容の別ファイルなど）ときも画像を読み直す
+  useEffect(() => {
+    const { resolveImage } = propsRef.current
+    if (resolveImage && contentRef.current) resolveImages(contentRef.current, props.assetBase ?? '', resolveImage)
+  }, [props.assetBase])
 
   // 図の描画や画像読み込みで高さが変わったら対応表を作り直す
   useEffect(() => {
@@ -106,7 +138,7 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(props, 
       e.preventDefault()
       const id = decodeURIComponent(href.slice(1))
       contentRef.current!.querySelector(`[id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'start' })
-    } else if (a && href && !/^[a-z][a-z\d+.-]*:|^\/\//i.test(href)) {
+    } else if (a && href && isRelativeUrl(href)) {
       // 相対リンクはアプリ自体の URL への遷移になってしまうので、エディタ内で開く
       e.preventDefault()
       propsRef.current.onOpenLink?.(href)

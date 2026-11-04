@@ -24,6 +24,7 @@ import {
   nfc,
   openDirectory,
   getFileByPath,
+  imageType,
   openFiles,
   readHandle,
   readTree,
@@ -41,7 +42,7 @@ import {
   type RecentEntry,
   type TreeNode,
 } from './lib/fs'
-import { fetchFileByPath, getDraft, getToken, ghKey, saveDraft, type CommitResult, type GhDraft, type GhRef } from './lib/github'
+import { fetchBytesByPath, fetchFileByPath, getDraft, getToken, ghKey, saveDraft, type CommitResult, type GhDraft, type GhRef } from './lib/github'
 import { debounce } from './lib/hash'
 import type { Heading } from './lib/markdown'
 import { slideStartLines } from './lib/marp'
@@ -398,6 +399,8 @@ export default function App() {
   const openProject = useCallback(
     async (p: Project | null) => {
       projectRef.current = p
+      for (const url of imageCacheRef.current.values()) void url.then((u) => u && URL.revokeObjectURL(u))
+      imageCacheRef.current.clear()
       setProjectState(p)
       setTree([])
       setNeedsPermission(false)
@@ -606,6 +609,52 @@ export default function App() {
     },
     [activate, jumpToAnchor, openDocument, reportError, toast],
   )
+
+  /** 相対パスの画像の読み込み結果（blob URL）。プロジェクトを切り替えたら捨てる */
+  const imageCacheRef = useRef(new Map<string, Promise<string | null>>())
+
+  /** プレビューの相対パスの画像を、開いているフォルダや GitHub から読み込んで blob URL にする */
+  const resolveImage = useCallback(async (src: string): Promise<string | null> => {
+    const doc = docsRef.current.find((d) => d.id === activeIdRef.current)
+    const base = doc?.gh?.path ?? doc?.path
+    if (!doc || base == null) return null
+    let rel = src.replace(/[?#].*$/, '')
+    try {
+      rel = decodeURIComponent(rel)
+    } catch {
+      /* そのまま使う */
+    }
+    const path = resolveRelativePath(base, rel)
+    const type = path && imageType(path)
+    if (!path || !type) return null
+    const p = projectRef.current
+    const key = doc.gh ? ghKey({ ...doc.gh, path }) : p?.kind === 'directory' ? `${p.name}:${path}` : null
+    if (!key) return null
+    const cache = imageCacheRef.current
+    let hit = cache.get(key)
+    if (!hit) {
+      hit = (async () => {
+        let bytes: BlobPart | null = null
+        if (doc.gh) {
+          const token = await getToken()
+          if (token) bytes = await fetchBytesByPath(token, doc.gh.owner, doc.gh.repo, doc.gh.branch, path)
+        } else if (p?.kind === 'directory' && (await p.handle.queryPermission({ mode: 'read' })) === 'granted') {
+          const handle = await getFileByPath(p.handle, path)
+          if (handle) bytes = await handle.getFile()
+        }
+        return bytes ? URL.createObjectURL(new Blob([bytes], { type })) : null
+      })()
+      cache.set(key, hit)
+      // 見つからなかったものは、あとで追加されたときに読めるよう覚えない
+      void hit.then(
+        (url) => url || cache.delete(key),
+        () => cache.delete(key),
+      )
+    }
+    return hit
+  }, [])
+
+  const assetBase = activeDoc.gh ? ghKey(activeDoc.gh) : `${project?.name ?? ''}:${activeDoc.path ?? ''}`
 
   const flushGhDrafts = useCallback(async () => {
     for (const d of docsRef.current) if (d.gh && d.dirty) await saveGhDraft(d.id, d.gh)
@@ -1016,6 +1065,8 @@ export default function App() {
                 onHeadings={setHeadings}
                 onRendered={onPreviewRendered}
                 onOpenLink={(href) => void openLink(href)}
+                resolveImage={resolveImage}
+                assetBase={assetBase}
               />
             )}
           </section>

@@ -181,6 +181,24 @@ export async function readTree(dir: FileSystemDirectoryHandle, path = '', depth 
   )
 }
 
+/** 文書中の参照が相対パス（スキームなし・// 始まりでない）か */
+export const isRelativeUrl = (url: string) => !!url && !url.startsWith('#') && !/^[a-z][a-z\d+.-]*:|^\/\//i.test(url)
+
+const IMAGE_TYPES: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  avif: 'image/avif',
+  svg: 'image/svg+xml',
+  bmp: 'image/bmp',
+  ico: 'image/x-icon',
+}
+
+/** 拡張子から画像の MIME タイプを求める（画像でなければ空文字） */
+export const imageType = (path: string) => IMAGE_TYPES[path.slice(path.lastIndexOf('.') + 1).toLowerCase()] ?? ''
+
 /** dir（フォルダのパス）が path の祖先か */
 export const isAncestor = (dir: string, path: string | null) => !!path && path.startsWith(`${dir}/`)
 

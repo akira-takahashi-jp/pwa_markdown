@@ -181,10 +181,13 @@ export async function fetchTree(token: string, owner: string, repo: string, bran
   return { tree: sort(root), truncated: raw.truncated }
 }
 
-function decodeBase64Utf8(b64: string): string {
+function decodeBase64(b64: string): Uint8Array<ArrayBuffer> {
   const bin = atob(b64.replace(/\s/g, ''))
-  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0))
-  return new TextDecoder().decode(bytes)
+  return Uint8Array.from(bin, (c) => c.charCodeAt(0))
+}
+
+function decodeBase64Utf8(b64: string): string {
+  return new TextDecoder().decode(decodeBase64(b64))
 }
 
 export async function fetchBlob(token: string, owner: string, repo: string, sha: string): Promise<string> {
@@ -203,6 +206,24 @@ export async function fetchFileByPath(token: string, owner: string, repo: string
     // 1MB を超えるファイルは content が空なので blob から取る
     const content = f.encoding === 'base64' && f.content ? decodeBase64Utf8(f.content) : await fetchBlob(token, owner, repo, f.sha)
     return { sha: f.sha, content }
+  } catch (e) {
+    if (e instanceof GhError && e.status === 404) return null
+    throw e
+  }
+}
+
+/** パスでファイルをバイト列として取得する（画像の表示用。見つからなければ null） */
+export async function fetchBytesByPath(token: string, owner: string, repo: string, branch: string, path: string) {
+  try {
+    const f = await request<{ type: string; sha: string; content?: string; encoding?: string }>(
+      token,
+      `${repoPath(owner, repo)}/contents/${path.split('/').map(enc).join('/')}?ref=${enc(branch)}`,
+    )
+    if (f.type !== 'file') return null
+    if (f.encoding === 'base64' && f.content) return decodeBase64(f.content)
+    // 1MB を超えるファイルは content が空なので blob から取る
+    const b = await request<{ content: string }>(token, `${repoPath(owner, repo)}/git/blobs/${f.sha}`)
+    return decodeBase64(b.content)
   } catch (e) {
     if (e instanceof GhError && e.status === 404) return null
     throw e
