@@ -901,7 +901,8 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       if (presenting !== null) return
       const mod = e.ctrlKey || e.metaKey
-      const k = e.key.toLowerCase()
+      // Mac では Option を押すと e.key が別の文字（Option+W → ∑）になるため、Alt 付きは物理キー（e.code）で判定する
+      const k = e.altKey && /^(Key[A-Z]|Digit\d)$/.test(e.code) ? e.code.slice(-1).toLowerCase() : e.key.toLowerCase()
       let handled = true
       if (mod && e.altKey && k === 'n') doNew()
       else if (mod && e.altKey && k === 'w') closeDoc(activeIdRef.current)
@@ -918,8 +919,8 @@ export default function App() {
       else if (mod && !e.shiftKey && k === 'b') setSidebarOpen((v) => !v)
       else if ((mod && k === '/') || e.key === 'F1') setHelpOpen(true)
       else if (e.key === 'F5' && marp) startPresentation(0)
-      else if (e.altKey && !mod && ['1', '2', '3'].includes(e.key))
-        setViewMode((['editor', 'split', 'preview'] as const)[Number(e.key) - 1])
+      else if (e.altKey && !mod && ['1', '2', '3'].includes(k))
+        setViewMode((['editor', 'split', 'preview'] as const)[Number(k) - 1])
       else handled = false
       if (handled) {
         e.preventDefault()
