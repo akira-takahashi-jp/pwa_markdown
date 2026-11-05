@@ -243,6 +243,23 @@ export function resolveRelativePath(fromPath: string, href: string): string | nu
   return base.join('/')
 }
 
+/** フォルダを作る。path は root からの相対パスで、途中のフォルダもまとめて作る */
+export async function createDirectory(root: FileSystemDirectoryHandle, path: string): Promise<void> {
+  if (!(await ensurePermission(root))) throw new Error('書き込み権限がありません')
+  const parts = path.split('/').map((s) => s.trim()).filter(Boolean)
+  if (!parts.length) throw new Error('フォルダ名を入力してください')
+  if (parts.some((s) => s === '.' || s === '..' || /[\\:*?"<>|]/.test(s))) throw new Error(`使えない名前です: ${path}`)
+  let dir = root
+  for (let i = 0; i < parts.length; i++) {
+    if (i === parts.length - 1) {
+      // 最後のフォルダが既にあれば知らせる
+      const exists = await dir.getDirectoryHandle(parts[i]).then(() => true, () => false)
+      if (exists) throw new Error(`${parts.join('/')} はすでにあります`)
+    }
+    dir = await dir.getDirectoryHandle(parts[i], { create: true })
+  }
+}
+
 /* ---------------- プロジェクト ---------------- */
 
 /** エクスプローラで開くもの。ファイル・フォルダ・GitHub のリポジトリ */

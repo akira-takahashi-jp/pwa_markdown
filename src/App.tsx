@@ -15,6 +15,7 @@ import { exportHtml, exportMarp, printDocument } from './lib/export'
 import { isMarp } from './lib/frontmatter'
 import {
   addRecent,
+  createDirectory,
   ensurePermission,
   getCurrentProject,
   getRecent,
@@ -532,6 +533,21 @@ export default function App() {
       console.error(e)
     }
   }, [openDocument, reportError, toast])
+
+  /** 開いているフォルダの中に新しいフォルダを作る */
+  const newFolder = useCallback(async () => {
+    const p = projectRef.current
+    if (p?.kind !== 'directory') return
+    const path = window.prompt('作成するフォルダのパス（フォルダのルートから。/ 区切りで階層も作れます）', '新しいフォルダ')?.trim()
+    if (!path) return
+    try {
+      await createDirectory(p.handle, nfc(path))
+      toast({ kind: 'success', message: `フォルダ ${nfc(path)} を作成しました` })
+      await loadTree(p.handle)
+    } catch (e) {
+      reportError(e)
+    }
+  }, [loadTree, reportError, toast])
 
   /** 起動後に開き直したフォルダへのアクセスを再度許可してもらう */
   const grantPermission = useCallback(async () => {
@@ -1080,6 +1096,7 @@ export default function App() {
                 onOpenProjectFile={openProjectFile}
                 onGrantPermission={grantPermission}
                 onRefresh={() => project?.kind === 'directory' && void loadTree(project.handle)}
+                onNewFolder={() => void newFolder()}
                 onCloseProject={() => void openProject(null)}
                 onOpenFile={doOpen}
                 onOpenFolder={doOpenFolder}

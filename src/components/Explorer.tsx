@@ -21,6 +21,7 @@ interface Props {
   onOpenProjectFile(): void
   onGrantPermission(): void
   onRefresh(): void
+  onNewFolder(): void
   onCloseProject(): void
   onOpenFile(): void
   onOpenFolder(): void
@@ -97,9 +98,14 @@ export function Explorer(props: Props) {
           {project && (
             <span>
               {project.kind === 'directory' && !props.needsPermission && (
-                <button className="icon-btn" onClick={props.onRefresh} title="再読み込み">
-                  ⟳
-                </button>
+                <>
+                  <button className="icon-btn" onClick={props.onNewFolder} title="新しいフォルダ">
+                    ＋📁
+                  </button>
+                  <button className="icon-btn" onClick={props.onRefresh} title="再読み込み">
+                    ⟳
+                  </button>
+                </>
               )}
               <button className="icon-btn" onClick={props.onCloseProject} title="プロジェクトを閉じる">
                 ✕
