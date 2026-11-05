@@ -102,6 +102,8 @@ export default function App() {
   const contentsRef = useRef(new Map<string, string>([[WELCOME_ID, WELCOME]]))
   /** 最後に保存した（開いた）ときの内容。これと一致すれば未保存扱いにしない */
   const savedRef = useRef(new Map<string, string>([[WELCOME_ID, WELCOME]]))
+  /** 最後に確かめたときのファイルの更新日時とサイズ（変わったときだけ中身を読む） */
+  const diskStampRef = useRef(new Map<string, string>())
   const [activeId, setActiveIdState] = useState(WELCOME_ID)
   const activeIdRef = useRef(activeId)
   const [previewSrc, setPreviewSrc] = useState(WELCOME)
@@ -352,6 +354,7 @@ export default function App() {
       if (id === activeIdRef.current) activate(rest[Math.min(index, rest.length - 1)].id)
       contentsRef.current.delete(id)
       savedRef.current.delete(id)
+      diskStampRef.current.delete(id)
       editorRef.current?.close(id)
       autosave()
     },
@@ -450,6 +453,88 @@ export default function App() {
     },
     [reportError],
   )
+
+  /* ---------------- 他のアプリでの変更 ---------------- */
+
+  const checkingDiskRef = useRef(false)
+
+  /** タブの内容をファイルの内容 text に置き換える */
+  const reloadDoc = useCallback(
+    (id: string, text: string) => {
+      savedRef.current.set(id, text)
+      contentsRef.current.set(id, text)
+      // アクティブなタブは onChange 経由でプレビューも更新される（保存済みと同じなので未保存にはならない）
+      editorRef.current?.replace(id, text)
+      patchDoc(id, { dirty: false })
+      autosave()
+    },
+    [autosave, patchDoc],
+  )
+
+  /**
+   * 開いているファイルが他のアプリで変更されていないか確かめる。
+   * 未編集のタブは読み込み直し、編集中のタブは読み込み直すかどうかを尋ねる
+   */
+  const checkDiskChanges = useCallback(async () => {
+    if (checkingDiskRef.current) return
+    checkingDiskRef.current = true
+    try {
+      for (const doc of docsRef.current) {
+        const h = doc.handle
+        // 権限の再要求はユーザー操作が必要なので、許可済みのものだけ確かめる
+        if (!h || (await h.queryPermission({ mode: 'read' }).catch(() => 'denied')) !== 'granted') continue
+        let file: File
+        try {
+          file = await h.getFile()
+        } catch {
+          continue // 削除・移動された
+        }
+        const stamp = `${file.lastModified}:${file.size}`
+        const known = diskStampRef.current.get(doc.id)
+        if (known === stamp) continue
+        diskStampRef.current.set(doc.id, stamp)
+        // 復元した未保存のタブは元にした内容が分からないので、最初の確認では比べない
+        if (known === undefined && !savedRef.current.has(doc.id)) continue
+        const text = await file.text()
+        const current = docsRef.current.find((d) => d.id === doc.id)
+        if (!current || text === savedRef.current.get(doc.id)) continue
+        if (!current.dirty) {
+          reloadDoc(doc.id, text)
+          toast({ kind: 'info', message: `${doc.name} を他のアプリでの変更に合わせて読み込み直しました` })
+        } else {
+          toast({
+            kind: 'error',
+            message: `${doc.name} は他のアプリで変更されています。このまま保存すると上書きします`,
+            sticky: true,
+            action: { label: '読み込み直す', onClick: () => reloadDoc(doc.id, text) },
+          })
+        }
+      }
+    } finally {
+      checkingDiskRef.current = false
+    }
+  }, [reloadDoc, toast])
+
+  // 表示中は定期的に、アプリに戻ってきたときはすぐに確かめる。フォルダのツリーも戻ってきたときに読み直す
+  useEffect(() => {
+    const check = () => document.visibilityState === 'visible' && void checkDiskChanges()
+    const refreshTree = async () => {
+      const p = projectRef.current
+      if (p?.kind === 'directory' && (await p.handle.queryPermission({ mode: 'read' })) === 'granted') await loadTree(p.handle)
+    }
+    const onFocus = () => {
+      check()
+      void refreshTree()
+    }
+    const timer = setInterval(check, 2000)
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', check)
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', check)
+    }
+  }, [checkDiskChanges, loadTree])
 
   /* ---------------- プロジェクト ---------------- */
 

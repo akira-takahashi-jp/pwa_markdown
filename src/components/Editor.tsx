@@ -21,6 +21,8 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 export interface EditorHandle {
   /** id の文書に切り替える（初めての id なら text で作成）。文書ごとに undo 履歴・カーソル・スクロール位置を保つ */
   open(id: string, text: string): void
+  /** id の文書の内容を text に置き換える（他のアプリでの変更の反映用）。カーソル・undo 履歴はできるだけ保つ */
+  replace(id: string, text: string): void
   /** id の文書の状態を破棄する */
   close(id: string): void
   getDoc(): string
@@ -57,6 +59,17 @@ const baseTheme = EditorView.theme({
   '.cm-content': { padding: '12px 0 40vh' },
   '.cm-gutters': { borderRight: '1px solid var(--border)' },
 })
+
+/** 先頭・末尾の共通部分を除いた差分。全体を置き換えるよりカーソル位置がずれにくい */
+function diffChange(before: string, after: string) {
+  if (before === after) return null
+  let from = 0
+  const max = Math.min(before.length, after.length)
+  while (from < max && before.charCodeAt(from) === after.charCodeAt(from)) from++
+  let end = 0
+  while (end < max - from && before.charCodeAt(before.length - 1 - end) === after.charCodeAt(after.length - 1 - end)) end++
+  return { from, to: before.length - end, insert: after.slice(from, after.length - end) }
+}
 
 export const Editor = forwardRef<EditorHandle, Props>(function Editor(props, ref) {
   const hostRef = useRef<HTMLDivElement>(null)
@@ -135,6 +148,16 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(props, ref
         view.dispatch({ effects: themeCompartment.reconfigure(propsRef.current.dark ? oneDark : []) })
         const top = saved?.scrollTop ?? 0
         view.requestMeasure({ read: () => null, write: (_, v) => void (v.scrollDOM.scrollTop = top) })
+      },
+      replace(id, text) {
+        const view = viewRef.current!
+        const changes = diffChange(id === activeIdRef.current ? view.state.doc.toString() : (statesRef.current.get(id)?.state.doc.toString() ?? text), text)
+        if (!changes) return
+        if (id === activeIdRef.current) view.dispatch({ changes })
+        else {
+          const saved = statesRef.current.get(id)
+          if (saved) saved.state = saved.state.update({ changes }).state
+        }
       },
       close(id) {
         statesRef.current.delete(id)
