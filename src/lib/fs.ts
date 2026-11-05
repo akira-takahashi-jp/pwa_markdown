@@ -203,28 +203,90 @@ export const imageType = (path: string) => IMAGE_TYPES[path.slice(path.lastIndex
 export const isAncestor = (dir: string, path: string | null) => !!path && path.startsWith(`${dir}/`)
 
 /** フォルダ内のファイルをパス（"a/b.md"）で取り出す。名前は NFC で比べる（macOS の NFD 名に対応） */
-export async function getFileByPath(root: FileSystemDirectoryHandle, path: string): Promise<FileSystemFileHandle | null> {
+export const getFileByPath = (root: FileSystemDirectoryHandle, path: string) =>
+  getHandleByPath(root, path, 'file') as Promise<FileSystemFileHandle | null>
+
+/** フォルダ内のフォルダをパスで取り出す（空文字ならルート） */
+export const getDirectoryByPath = (root: FileSystemDirectoryHandle, path: string) =>
+  getHandleByPath(root, path, 'directory') as Promise<FileSystemDirectoryHandle | null>
+
+async function getHandleByPath(root: FileSystemDirectoryHandle, path: string, kind: FileSystemHandleKind): Promise<FileSystemHandle | null> {
   const parts = path.split('/').filter(Boolean)
+  if (!parts.length) return kind === 'directory' ? root : null
   let dir = root
   for (let i = 0; i < parts.length; i++) {
     const last = i === parts.length - 1
-    const kind = last ? 'file' : 'directory'
+    const k = last ? kind : 'directory'
     let found: FileSystemHandle | null = null
     try {
-      found = last ? await dir.getFileHandle(parts[i]) : await dir.getDirectoryHandle(parts[i])
+      found = k === 'file' ? await dir.getFileHandle(parts[i]) : await dir.getDirectoryHandle(parts[i])
     } catch {
       for await (const entry of dir.values()) {
-        if (entry.kind === kind && nfc(entry.name) === nfc(parts[i])) {
+        if (entry.kind === k && nfc(entry.name) === nfc(parts[i])) {
           found = entry
           break
         }
       }
     }
     if (!found) return null
-    if (last) return found as FileSystemFileHandle
+    if (last) return found
     dir = found as FileSystemDirectoryHandle
   }
   return null
+}
+
+const parentPath = (path: string) => path.slice(0, Math.max(0, path.lastIndexOf('/')))
+const baseName = (path: string) => path.slice(path.lastIndexOf('/') + 1)
+
+/** dir の中に name の項目（ファイル・フォルダ問わず）があるか */
+async function hasEntry(dir: FileSystemDirectoryHandle, name: string): Promise<boolean> {
+  for await (const entry of dir.values()) if (nfc(entry.name) === nfc(name)) return true
+  return false
+}
+
+/** フォルダの中身ごと dest にコピーする */
+async function copyEntry(src: FileSystemHandle, dest: FileSystemDirectoryHandle): Promise<void> {
+  if (src.kind === 'file') {
+    const file = await (src as FileSystemFileHandle).getFile()
+    const w = await (await dest.getFileHandle(src.name, { create: true })).createWritable()
+    await w.write(file)
+    await w.close()
+    return
+  }
+  const dir = await dest.getDirectoryHandle(src.name, { create: true })
+  for await (const entry of (src as FileSystemDirectoryHandle).values()) await copyEntry(entry, dir)
+}
+
+/**
+ * ファイル・フォルダ（from）を別のフォルダ（toDir。空文字ならルート）へ移動する。移動後のパスを返す。
+ * move() が使えればそれを使い、使えなければコピーしてから元を消す
+ */
+export async function moveEntry(root: FileSystemDirectoryHandle, from: string, toDir: string): Promise<string> {
+  if (!(await ensurePermission(root))) throw new Error('書き込み権限がありません')
+  const name = baseName(from)
+  const to = toDir ? `${toDir}/${name}` : name
+  if (toDir === from || isAncestor(from, toDir)) throw new Error('フォルダをその中へは移動できません')
+  if (parentPath(from) === toDir) return from
+  const srcParent = await getDirectoryByPath(root, parentPath(from))
+  const dest = await getDirectoryByPath(root, toDir)
+  if (!srcParent || !dest) throw new Error('移動元または移動先が見つかりません')
+  const src = (await getFileByPath(root, from)) ?? (await getDirectoryByPath(root, from))
+  if (!src) throw new Error(`${from} が見つかりません`)
+  if (await hasEntry(dest, name)) throw new Error(`移動先に ${name} がすでにあります`)
+
+  const movable = src as FileSystemHandle & { move?(dest: FileSystemDirectoryHandle): Promise<void> }
+  if (movable.move) {
+    try {
+      await movable.move(dest)
+      return to
+    } catch (e) {
+      // 未対応（ブラウザによってはフォルダの移動など）ならコピーで代替する。途中まで動いていたら諦める
+      if (await hasEntry(dest, name)) throw e
+    }
+  }
+  await copyEntry(src, dest)
+  await srcParent.removeEntry(src.name, { recursive: true })
+  return to
 }
 
 /**

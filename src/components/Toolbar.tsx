@@ -14,6 +14,9 @@ interface Props {
   onOpen(): void
   onOpenFolder(): void
   onOpenGitHub(): void
+  /** ローカルフォルダを開いているときだけ新しいフォルダを作れる */
+  canNewFolder: boolean
+  onNewFolder(): void
   onGitHubKey(): void
   onCheckUpdate(): void
   onSave(): void
@@ -93,6 +96,10 @@ export function Toolbar(p: Props) {
         </button>
         <button onClick={p.onOpenGitHub}>
           GitHub リポジトリを開く…<kbd>Ctrl+Alt+G</kbd>
+        </button>
+        <hr />
+        <button onClick={p.onNewFolder} disabled={!p.canNewFolder} title={p.canNewFolder ? undefined : 'フォルダを開いているときに使えます'}>
+          新しいフォルダ…
         </button>
         <hr />
         <button onClick={p.onSave}>

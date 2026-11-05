@@ -16,6 +16,8 @@ import { isMarp } from './lib/frontmatter'
 import {
   addRecent,
   createDirectory,
+  isAncestor,
+  moveEntry,
   ensurePermission,
   getCurrentProject,
   getRecent,
@@ -549,6 +551,32 @@ export default function App() {
     }
   }, [loadTree, reportError, toast])
 
+  /** 開いているフォルダの中でファイル・フォルダを移動する。開いているタブのパスと保存先も付け替える */
+  const moveTreeEntry = useCallback(
+    async (from: string, toDir: string) => {
+      const p = projectRef.current
+      if (p?.kind !== 'directory') return
+      try {
+        const to = await moveEntry(p.handle, from, toDir)
+        if (to === from) return
+        const moved = (path: string | null) => !!path && (path === from || isAncestor(from, path))
+        // 移動前のハンドルのままだと元の場所に保存してしまうので、移動先から取り直す
+        const patches = new Map<string, Partial<DocMeta>>()
+        for (const d of docsRef.current) {
+          if (!moved(d.path)) continue
+          const path = to + d.path!.slice(from.length)
+          patches.set(d.id, { path, handle: (await getFileByPath(p.handle, path)) ?? d.handle })
+        }
+        setDocs(docsRef.current.map((d) => (patches.has(d.id) ? { ...d, ...patches.get(d.id) } : d)))
+        toast({ kind: 'success', message: `${from} を ${toDir || 'ルート'} へ移動しました` })
+      } catch (e) {
+        reportError(e)
+      }
+      await loadTree(p.handle)
+    },
+    [loadTree, reportError, setDocs, toast],
+  )
+
   /** 起動後に開き直したフォルダへのアクセスを再度許可してもらう */
   const grantPermission = useCallback(async () => {
     const p = projectRef.current
@@ -1048,6 +1076,8 @@ export default function App() {
         onOpen={doOpen}
         onOpenFolder={doOpenFolder}
         onOpenGitHub={doOpenGitHub}
+        canNewFolder={project?.kind === 'directory' && !needsPermission}
+        onNewFolder={() => void newFolder()}
         onGitHubKey={() => setGhKeyDialogOpen(true)}
         onCheckUpdate={() => void checkForUpdate()}
         onSave={doSave}
@@ -1097,6 +1127,7 @@ export default function App() {
                 onGrantPermission={grantPermission}
                 onRefresh={() => project?.kind === 'directory' && void loadTree(project.handle)}
                 onNewFolder={() => void newFolder()}
+                onMove={(from, toDir) => void moveTreeEntry(from, toDir)}
                 onCloseProject={() => void openProject(null)}
                 onOpenFile={doOpen}
                 onOpenFolder={doOpenFolder}
