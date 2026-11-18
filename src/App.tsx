@@ -126,6 +126,7 @@ export default function App() {
   /** サイドバーの上下の比率（エクスプローラの割合） */
   const [sideSplit, setSideSplit] = usePersistentState('md-editor:side-split', 0.6)
   const [ratio, setRatio] = usePersistentState('md-editor:ratio', 0.5)
+  const [previewFullWidth, setPreviewFullWidth] = usePersistentState('md-editor:preview-full-width', false)
 
   const [headings, setHeadings] = useState<Heading[]>([])
   const [slides, setSlides] = useState<SlideInfo[]>([])
@@ -1140,7 +1141,7 @@ export default function App() {
 
   return (
     <div
-      className={`app view-${viewMode}${dragOver ? ' is-dragover' : ''}`}
+      className={`app view-${viewMode}${previewFullWidth ? ' is-preview-full' : ''}${dragOver ? ' is-dragover' : ''}`}
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes('Files')) {
           e.preventDefault()
@@ -1157,6 +1158,7 @@ export default function App() {
         viewMode={viewMode}
         themePref={themePref}
         sidebarOpen={sidebarOpen}
+        previewFullWidth={previewFullWidth}
         onNew={doNew}
         onOpen={doOpen}
         onOpenFolder={doOpenFolder}
@@ -1172,6 +1174,7 @@ export default function App() {
         onPrint={doPrint}
         onViewMode={setViewMode}
         onToggleSidebar={() => setSidebarOpen((v) => !v)}
+        onTogglePreviewFullWidth={() => setPreviewFullWidth((v) => !v)}
         onCycleTheme={cycleTheme}
         onPresent={() => startPresentation(0)}
         onHelp={() => setHelpOpen(true)}

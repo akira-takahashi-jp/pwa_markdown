@@ -10,6 +10,8 @@ interface Props {
   viewMode: ViewMode
   themePref: ThemePref
   sidebarOpen: boolean
+  /** プレビューを画面いっぱいの幅で表示するか */
+  previewFullWidth: boolean
   onNew(): void
   onOpen(): void
   onOpenFolder(): void
@@ -26,6 +28,7 @@ interface Props {
   onPrint(): void
   onViewMode(m: ViewMode): void
   onToggleSidebar(): void
+  onTogglePreviewFullWidth(): void
   onCycleTheme(): void
   onPresent(): void
   onHelp(): void
@@ -121,6 +124,10 @@ export function Toolbar(p: Props) {
         </button>
       </Menu>
       <Menu label="設定" title="設定">
+        <button onClick={p.onTogglePreviewFullWidth} role="menuitemcheckbox" aria-checked={p.previewFullWidth}>
+          プレビューを全幅で表示<span className="menu-check">{p.previewFullWidth ? '✓' : ''}</span>
+        </button>
+        <hr />
         <button onClick={p.onGitHubKey}>GitHub の認証キー…</button>
         <button onClick={p.onCheckUpdate}>アップデートを確認</button>
       </Menu>
