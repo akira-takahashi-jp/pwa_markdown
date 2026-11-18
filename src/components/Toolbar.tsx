@@ -44,6 +44,19 @@ function SidebarIcon() {
   )
 }
 
+/** プレビューの全幅表示アイコン（左右に広がる矢印） */
+function FullWidthIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <line x1="1.5" y1="2.5" x2="1.5" y2="13.5" />
+      <line x1="14.5" y1="2.5" x2="14.5" y2="13.5" />
+      <line x1="4" y1="8" x2="12" y2="8" />
+      <polyline points="6.5,5.5 4,8 6.5,10.5" />
+      <polyline points="9.5,5.5 12,8 9.5,10.5" />
+    </svg>
+  )
+}
+
 /**
  * メニューバーのメニュー。クリックで開閉し、外側クリックで閉じる。
  * 別のメニューが開いているときはホバーだけで切り替わる（デスクトップアプリのメニューバーと同じ）
@@ -124,10 +137,6 @@ export function Toolbar(p: Props) {
         </button>
       </Menu>
       <Menu label="設定" title="設定">
-        <button onClick={p.onTogglePreviewFullWidth} role="menuitemcheckbox" aria-checked={p.previewFullWidth}>
-          プレビューを全幅で表示<span className="menu-check">{p.previewFullWidth ? '✓' : ''}</span>
-        </button>
-        <hr />
         <button onClick={p.onGitHubKey}>GitHub の認証キー…</button>
         <button onClick={p.onCheckUpdate}>アップデートを確認</button>
       </Menu>
@@ -154,6 +163,15 @@ export function Toolbar(p: Props) {
           </button>
         ))}
       </div>
+      <button
+        className={`icon-btn${p.previewFullWidth ? ' is-on' : ''}`}
+        onClick={p.onTogglePreviewFullWidth}
+        disabled={p.viewMode === 'editor'}
+        aria-pressed={p.previewFullWidth}
+        title={p.previewFullWidth ? 'プレビューの幅を戻す' : 'プレビューを全幅で表示'}
+      >
+        <FullWidthIcon />
+      </button>
       <button className="btn" onClick={p.onCycleTheme} title="テーマ (Ctrl+Alt+T)">
         {THEME_LABEL[p.themePref]}
       </button>

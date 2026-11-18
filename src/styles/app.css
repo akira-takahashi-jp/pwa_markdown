@@ -155,7 +155,6 @@ kbd {
 .menu-list kbd { border: 0; background: none; padding: 0; font-family: var(--font-ui); font-size: 12px; }
 .menu-list button:hover:not(:disabled) { background: var(--bg-hover); }
 .menu-list button:disabled { opacity: 0.5; cursor: default; }
-.menu-list .menu-check { width: 1em; text-align: center; color: var(--accent); }
 .menu-list hr { border: 0; border-top: 1px solid var(--border); margin: 4px 0; }
 
 /* ---------- タブバー ---------- */
@@ -421,7 +420,7 @@ kbd {
 .mermaid-viewer-stage.is-dragging { cursor: grabbing; }
 .mermaid-viewer-canvas { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 .preview-scroller > .markdown-body { max-width: 900px; margin: 0 auto; padding: 24px 32px 50vh; }
-/* 設定「プレビューを全幅で表示」 */
+/* ツールバーの「全幅で表示」ボタン */
 .is-preview-full .preview-scroller > .markdown-body { max-width: none; }
 
 /* ---------- スライド ---------- */
