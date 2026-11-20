@@ -3,7 +3,7 @@ import { patchBlocks } from '../lib/blocks'
 import { renderMarkdown, type Heading } from '../lib/markdown'
 import { hydrateMermaid, type Hydration } from '../lib/mermaid'
 import { DiagramTools, MermaidViewer, useInlineDiagramZoom, zoomableDiagram } from './MermaidZoom'
-import { isRelativeUrl } from '../lib/fs'
+import { resolveImages } from '../lib/images'
 import { handlePreviewLinkClick } from '../lib/links'
 import { collectAnchors, lineToTop, topToLine, type Anchor, type PreviewHandle } from '../lib/scrollSync'
 
@@ -21,25 +21,6 @@ interface Props {
   resolveImage?(src: string): Promise<string | null>
   /** 相対パスの基準（文書の場所）。変わったら画像を読み直す */
   assetBase?: string
-}
-
-/**
- * 相対パスの画像を、開いているフォルダや GitHub から読み込んだものに差し替える。
- * 差し替えた画像は元のパスと基準を data 属性に残し、基準が変わったときだけ読み直す
- */
-function resolveImages(root: HTMLElement, base: string, resolve: (src: string) => Promise<string | null>) {
-  for (const img of root.querySelectorAll<HTMLImageElement>('img')) {
-    const src = img.dataset.src ?? img.getAttribute('src') ?? ''
-    if (!isRelativeUrl(src) || img.dataset.base === base) continue
-    img.dataset.src = src
-    img.dataset.base = base
-    img.removeAttribute('src')
-    void resolve(src)
-      .then((url) => {
-        if (url && img.dataset.base === base) img.src = url
-      })
-      .catch((e) => console.error('[preview] image load failed', src, e))
-  }
 }
 
 export const Preview = forwardRef<PreviewHandle, Props>(function Preview(props, ref) {
