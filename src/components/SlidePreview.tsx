@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { loadMarpBrowser, renderMarp, slideStartLines } from '../lib/marp'
 import { renderAllMermaid } from '../lib/mermaid'
+import { resolveImages } from '../lib/images'
 import { handlePreviewLinkClick } from '../lib/links'
 import type { PreviewHandle } from '../lib/scrollSync'
 
@@ -19,6 +20,10 @@ interface Props {
   onRendered?(): void
   /** スライド内の相対リンク（別の .md など）がクリックされた */
   onOpenLink?(href: string): void
+  /** 相対パスの画像を読み込んで表示用の URL にする（読めなければ null） */
+  resolveImage?(src: string): Promise<string | null>
+  /** 相対パスの基準（文書の場所）。変わったら画像を読み直す */
+  assetBase?: string
 }
 
 export const SlidePreview = forwardRef<PreviewHandle, Props>(function SlidePreview(props, ref) {
@@ -43,6 +48,9 @@ export const SlidePreview = forwardRef<PreviewHandle, Props>(function SlidePrevi
         setError(null)
         content.innerHTML = r.html
         startsRef.current = slideStartLines(props.src)
+        // 相対パスの画像はアプリの URL 基準になって表示されないので、文書の場所から読み込む
+        const { resolveImage, assetBase } = propsRef.current
+        if (resolveImage) resolveImages(content, assetBase ?? '', resolveImage)
         // marp-core のカスタム要素（自動スケーリング等）を適用
         cleanupBrowser = browser(content)
         // スライドは背景色がテーマで決まるため、図はアプリのテーマに関係なくライト配色で描く
@@ -67,6 +75,12 @@ export const SlidePreview = forwardRef<PreviewHandle, Props>(function SlidePrevi
       cleanupBrowser?.()
     }
   }, [props.src, props.themeKey])
+
+  // 文書の場所だけが変わった（同じ内容の別ファイルなど）ときも画像を読み直す
+  useEffect(() => {
+    const { resolveImage } = propsRef.current
+    if (resolveImage && contentRef.current) resolveImages(contentRef.current, props.assetBase ?? '', resolveImage)
+  }, [props.assetBase])
 
   const slideEls = () => [...contentRef.current!.querySelectorAll<SVGSVGElement>(':scope > div.marpit > svg[data-marpit-svg]')]
 

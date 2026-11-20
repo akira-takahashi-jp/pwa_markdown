@@ -1260,6 +1260,8 @@ export default function App() {
                 onPresent={startPresentation}
                 onRendered={onPreviewRendered}
                 onOpenLink={(href) => void openLink(href)}
+                resolveImage={resolveImage}
+                assetBase={assetBase}
               />
             ) : (
               <Preview
